@@ -300,6 +300,111 @@ GRAFANA.swordintelligence.airforce {
     }
 }
 
+# MATTERMOST - Secure Team Collaboration
+mattermost.swordintelligence.airforce {
+    import security_headers
+    import rate_limit_standard
+    import compression
+    import access_log mattermost
+
+    # TEMPEST Level C + Strong Crypto
+    header {
+        # TLS 1.3 only with strong ciphers (enforced at TLS layer)
+        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+
+        # Enhanced security headers
+        X-Frame-Options SAMEORIGIN
+        X-Content-Type-Options nosniff
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy strict-origin-when-cross-origin
+
+        # CSP for Mattermost
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' wss://mattermost.swordintelligence.airforce; frame-ancestors 'self';"
+
+        # Permissions Policy
+        Permissions-Policy "geolocation=(), microphone=(), camera=(self), payment=(), usb=()"
+
+        # Cookie security
+        X-Download-Options noopen
+        X-Permitted-Cross-Domain-Policies none
+    }
+
+    # WebSocket support for real-time messaging
+    @websockets {
+        header Connection *Upgrade*
+        header Upgrade websocket
+        path /api/v4/websocket
+    }
+
+    handle @websockets {
+        reverse_proxy mattermost:8065 {
+            import standard_proxy
+            header_up Upgrade {http.request.header.Upgrade}
+            header_up Connection {http.request.header.Connection}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-For {remote_host}
+
+            # WebSocket-specific timeouts
+            transport http {
+                read_timeout 300s
+                write_timeout 300s
+            }
+        }
+    }
+
+    # API endpoints
+    handle_path /api/* {
+        import rate_limit_api
+        reverse_proxy mattermost:8065 {
+            import standard_proxy
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    # Plugin routes
+    handle_path /plugins/* {
+        reverse_proxy mattermost:8065 {
+            import standard_proxy
+        }
+    }
+
+    # Main application
+    reverse_proxy mattermost:8065 {
+        import standard_proxy
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Real-IP {remote_host}
+
+        # Health check
+        health_uri /api/v4/system/ping
+        health_interval 30s
+        health_timeout 5s
+        health_status 200
+    }
+
+    # Static file caching
+    @static {
+        path *.css *.js *.jpg *.jpeg *.png *.gif *.ico *.woff *.woff2 *.svg *.webp *.ttf *.eot
+    }
+    header @static {
+        Cache-Control "public, max-age=31536000, immutable"
+    }
+}
+
+# MinIO Admin Console (Optional - for Mattermost object storage)
+minio.{$DOMAIN:localhost} {
+    import security_headers
+    import rate_limit_strict
+    import compression
+    import access_log minio
+
+    reverse_proxy mattermost-minio:9001 {
+        import standard_proxy
+    }
+}
+
 # MISP - Threat Intelligence
 misp.{$DOMAIN:localhost} {
     import security_headers
