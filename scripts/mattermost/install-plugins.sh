@@ -153,6 +153,30 @@ install_playbooks() {
     log_success "Playbooks ready for incident response workflows"
 }
 
+install_boards() {
+    log_step "Installing Mattermost Boards (Focalboard)"
+
+    # Boards/Focalboard is often pre-installed in modern Mattermost
+    local plugins
+    plugins=$(mmapi GET "/plugins")
+
+    if echo "$plugins" | grep -q -E "focalboard|boards"; then
+        log_info "Boards already installed"
+        # Try enabling with both possible plugin IDs
+        enable_plugin "focalboard" 2>/dev/null || enable_plugin "boards" 2>/dev/null || true
+    else
+        install_via_marketplace "focalboard" "boards"
+        enable_plugin "focalboard"
+    fi
+
+    log_success "Boards ready for investigation knowledge base"
+    log_info "Use cases:"
+    log_info "  • Investigation tracking (CVE analysis, threat intel)"
+    log_info "  • Vulnerability management boards"
+    log_info "  • Threat actor profiles and IOC databases"
+    log_info "  • Post-incident knowledge capture"
+}
+
 install_gitlab_plugin() {
     log_step "Installing GitLab Plugin"
 
@@ -275,6 +299,7 @@ print_summary() {
 
     log_success "Installed Plugins (v1 Stack):"
     echo "  ✓ Playbooks - Incident response workflows & checklists"
+    echo "  ✓ Boards - Investigation knowledge base (Kanban, tables, galleries)"
     echo "  ✓ GitLab - Repo integration, MR/issue notifications"
     echo "  ✓ Jira - Ticket creation and tracking (ready for Jira deploy)"
     echo "  ✓ Remind - Schedule reminders for IR follow-ups"
@@ -310,6 +335,12 @@ print_summary() {
     echo "     - Import templates from: mattermost/playbooks/"
     echo "     - Customize for SWORD workflows"
     echo ""
+    echo "  5. Set Up Investigation Boards:"
+    echo "     - Go to Boards → Create Board"
+    echo "     - Use templates from: mattermost/boards/"
+    echo "     - Track CVE analysis, threat intel, vulnerability management"
+    echo "     - Link boards to playbook runs for comprehensive IR"
+    echo ""
 }
 
 #==============================================
@@ -330,6 +361,7 @@ main() {
 
     # Install plugins
     install_playbooks
+    install_boards
     install_gitlab_plugin
     install_jira_plugin
     install_prometheus_plugin

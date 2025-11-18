@@ -492,6 +492,153 @@ MATTERMOST_COMPLIANCE_ENABLE=true
 
 ---
 
+## Plugins & Knowledge Management
+
+### Plugin Installation
+
+VPS2.0 includes automated installation for the v1 plugin stack focused on incident response and investigation workflows.
+
+**Automated Installation:**
+
+```bash
+# Install all v1 plugins
+./scripts/mattermost/install-plugins.sh
+```
+
+**Installed Plugins:**
+
+1. **Playbooks** - Incident response workflows and checklists
+2. **Boards (Focalboard)** - Investigation knowledge base
+3. **GitLab** - Repository integration and MR/issue notifications
+4. **Jira** - Ticket tracking (ready for Jira deployment)
+5. **Remind** - Task reminders and follow-ups
+6. **Webhooks** - Prometheus AlertManager integration
+
+### Mattermost Playbooks
+
+**Purpose:** Structured incident response workflows with checklists, metrics, and retrospectives.
+
+**Pre-configured Templates:**
+- `mattermost/playbooks/incident-response-p0.json` - P0 critical incident response
+- `mattermost/playbooks/security-patch-deployment.json` - Emergency patch deployment
+
+**Import Playbooks:**
+
+1. Navigate to **Playbooks** in Mattermost
+2. Click **+ New Playbook**
+3. Select **Import** and upload JSON template
+4. Customize checklists for your workflow
+
+**Usage:**
+```
+# In Mattermost channel
+/playbook run
+
+# Select playbook → Creates incident channel
+# Follow checklist → Track progress
+# Complete retrospective → Capture learnings
+```
+
+**Key Features:**
+- Automated channel creation for incidents
+- Role assignment (Incident Commander, responders)
+- Checklist-driven workflows
+- Time tracking and metrics
+- Post-incident retrospectives
+- Integration with GitLab and AlertManager
+
+### Mattermost Boards (Investigation Knowledge Base)
+
+**Purpose:** Visual knowledge management for investigations, CVE tracking, and threat intelligence.
+
+**Pre-configured Board Templates:**
+
+1. **CVE Vulnerability Tracker** (`mattermost/boards/cve-vulnerability-tracker.json`)
+   - Track vulnerabilities across VPS2.0 infrastructure
+   - Severity-based prioritization (Critical → Low)
+   - CVSS scoring and exploit status monitoring
+   - Patch deployment tracking
+   - Views: By Severity, By System, Active Exploits, Remediation Timeline
+
+2. **Threat Intelligence Database** (`mattermost/boards/threat-intelligence.json`)
+   - APT groups, ransomware campaigns, malware tracking
+   - MITRE ATT&CK tactic mapping
+   - IOC database (IPs, domains, hashes, URLs)
+   - Confidence levels and targeting analysis
+   - Views: By Threat Type, APT Groups, Relevant to VPS2.0, Recent Activity
+
+3. **Investigation Case Tracker** (`mattermost/boards/investigation-case-tracker.json`)
+   - Security investigation workflow (New → Investigating → Evidence → Analysis → Remediation → Closed)
+   - Priority levels (P0 Critical → P3 Low)
+   - Evidence chain of custody checklist
+   - Forensic image tracking
+   - Views: Active Cases, By Priority, P0 Critical, Evidence Checklist, Timeline, Archive
+
+**Import Board Templates:**
+
+1. Navigate to **Boards** in left sidebar
+2. Click **+ New Board** → **Use a template** → **Import**
+3. Upload JSON template from `mattermost/boards/`
+4. Set permissions (Private, Team, or Public)
+
+**Integrated Incident Response Workflow:**
+
+```
+Detection → Create Investigation Case (Board)
+         → Start P0 Playbook (Playbook)
+         → Create GitLab Issue (GitLab Plugin)
+         → Link Threat Intel (Board)
+         → Track Evidence (Board Checklist)
+         → Document Timeline (Board Calendar View)
+         → Close Playbook → Archive Case
+```
+
+**Example Use Cases:**
+
+- **CVE Response**: CVE published → Create card → Analyze affected systems → Link GitLab issue → Start patch playbook → Deploy → Close
+- **Threat Hunting**: Review Threat Intel DB → Create Investigation Case → Hunt for IOCs → Escalate if detected → Start incident playbook
+- **Incident Investigation**: Alert fires → Create case → Start playbook → Collect evidence → Build timeline → Remediate → Retrospective
+
+**Documentation:**
+- Detailed board usage: `mattermost/boards/README.md`
+- Board customization, workflows, and integration examples
+
+### GitLab Integration
+
+**Setup Guide:** `mattermost/integrations/gitlab-setup.md`
+
+**Quick Setup:**
+
+1. Create OAuth app in GitLab (Redirect: `https://mattermost.swordintelligence.airforce/plugins/.../oauth/complete`)
+2. System Console → Plugins → GitLab → Configure OAuth
+3. Subscribe channels to repos:
+   ```
+   /gitlab subscribe owner/repo --flags=issues,merges,pipeline label:"critical"
+   ```
+
+**Workflow Integration:**
+- Create issues from Mattermost: `/gitlab issue create repo "CVE-2024-1234"`
+- MR notifications in incident channels
+- CI/CD pipeline status updates
+- Link board cards to GitLab issues
+
+### Prometheus AlertManager Integration
+
+**Configuration:** `mattermost/integrations/alertmanager-config.yml`
+
+**Setup:**
+
+1. Create incoming webhook in Mattermost (#alerts channel)
+2. Configure AlertManager to POST to webhook URL
+3. Alerts appear in channel → Create investigation case → Start playbook
+
+**Alert Routing:**
+- **Critical alerts** → Repeat every 3 hours
+- **Warning alerts** → Repeat every 12 hours
+- Auto-create cards in Investigation Case Tracker for critical alerts
+
+---
+
 ## Integration Examples
 
 ### Slack Migration

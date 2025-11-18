@@ -1,0 +1,332 @@
+{
+  "version": 1,
+  "title": "Threat Intelligence Database",
+  "description": "Track threat actors, campaigns, TTPs, and indicators of compromise",
+  "icon": "🎯",
+  "showDescription": true,
+  "isTemplate": true,
+  "templateVersion": 0,
+  "cardProperties": [
+    {
+      "id": "threat_type",
+      "name": "Threat Type",
+      "type": "select",
+      "options": [
+        {
+          "id": "apt",
+          "value": "APT Group",
+          "color": "propColorRed"
+        },
+        {
+          "id": "ransomware",
+          "value": "Ransomware",
+          "color": "propColorOrange"
+        },
+        {
+          "id": "malware",
+          "value": "Malware Campaign",
+          "color": "propColorYellow"
+        },
+        {
+          "id": "phishing",
+          "value": "Phishing Campaign",
+          "color": "propColorBlue"
+        },
+        {
+          "id": "supply_chain",
+          "value": "Supply Chain",
+          "color": "propColorPurple"
+        },
+        {
+          "id": "insider",
+          "value": "Insider Threat",
+          "color": "propColorPink"
+        }
+      ]
+    },
+    {
+      "id": "confidence",
+      "name": "Confidence Level",
+      "type": "select",
+      "options": [
+        {
+          "id": "confirmed",
+          "value": "Confirmed",
+          "color": "propColorGreen"
+        },
+        {
+          "id": "probable",
+          "value": "Probable",
+          "color": "propColorYellow"
+        },
+        {
+          "id": "possible",
+          "value": "Possible",
+          "color": "propColorOrange"
+        },
+        {
+          "id": "unconfirmed",
+          "value": "Unconfirmed",
+          "color": "propColorGray"
+        }
+      ]
+    },
+    {
+      "id": "targeting",
+      "name": "Targeting",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "defense",
+          "value": "Defense Sector",
+          "color": "propColorRed"
+        },
+        {
+          "id": "government",
+          "value": "Government",
+          "color": "propColorBlue"
+        },
+        {
+          "id": "tech",
+          "value": "Technology",
+          "color": "propColorPurple"
+        },
+        {
+          "id": "finance",
+          "value": "Financial",
+          "color": "propColorGreen"
+        },
+        {
+          "id": "healthcare",
+          "value": "Healthcare",
+          "color": "propColorPink"
+        },
+        {
+          "id": "infrastructure",
+          "value": "Critical Infrastructure",
+          "color": "propColorOrange"
+        }
+      ]
+    },
+    {
+      "id": "mitre_tactics",
+      "name": "MITRE ATT&CK Tactics",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "initial_access",
+          "value": "Initial Access",
+          "color": "propColorRed"
+        },
+        {
+          "id": "execution",
+          "value": "Execution",
+          "color": "propColorOrange"
+        },
+        {
+          "id": "persistence",
+          "value": "Persistence",
+          "color": "propColorYellow"
+        },
+        {
+          "id": "privilege_escalation",
+          "value": "Privilege Escalation",
+          "color": "propColorGreen"
+        },
+        {
+          "id": "defense_evasion",
+          "value": "Defense Evasion",
+          "color": "propColorBlue"
+        },
+        {
+          "id": "credential_access",
+          "value": "Credential Access",
+          "color": "propColorPurple"
+        },
+        {
+          "id": "discovery",
+          "value": "Discovery",
+          "color": "propColorPink"
+        },
+        {
+          "id": "lateral_movement",
+          "value": "Lateral Movement",
+          "color": "propColorTeal"
+        },
+        {
+          "id": "collection",
+          "value": "Collection",
+          "color": "propColorCyan"
+        },
+        {
+          "id": "exfiltration",
+          "value": "Exfiltration",
+          "color": "propColorGray"
+        },
+        {
+          "id": "impact",
+          "value": "Impact",
+          "color": "propColorBrown"
+        }
+      ]
+    },
+    {
+      "id": "ioc_type",
+      "name": "IOC Type",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "ip",
+          "value": "IP Addresses",
+          "color": "propColorBlue"
+        },
+        {
+          "id": "domain",
+          "value": "Domains",
+          "color": "propColorPurple"
+        },
+        {
+          "id": "hash",
+          "value": "File Hashes",
+          "color": "propColorGreen"
+        },
+        {
+          "id": "url",
+          "value": "URLs",
+          "color": "propColorOrange"
+        },
+        {
+          "id": "email",
+          "value": "Email Addresses",
+          "color": "propColorPink"
+        },
+        {
+          "id": "registry",
+          "value": "Registry Keys",
+          "color": "propColorYellow"
+        }
+      ]
+    },
+    {
+      "id": "first_seen",
+      "name": "First Seen",
+      "type": "date"
+    },
+    {
+      "id": "last_activity",
+      "name": "Last Activity",
+      "type": "date"
+    },
+    {
+      "id": "analyst",
+      "name": "Analyst",
+      "type": "person"
+    },
+    {
+      "id": "mitre_link",
+      "name": "MITRE ATT&CK",
+      "type": "url"
+    },
+    {
+      "id": "source",
+      "name": "Intel Source",
+      "type": "text"
+    },
+    {
+      "id": "relevant_to_vps",
+      "name": "Relevant to VPS2.0",
+      "type": "checkbox"
+    }
+  ],
+  "views": [
+    {
+      "title": "By Threat Type",
+      "viewType": "board",
+      "groupById": "threat_type",
+      "sortOptions": [
+        {
+          "propertyId": "last_activity",
+          "reversed": true
+        }
+      ],
+      "visiblePropertyIds": [
+        "confidence",
+        "targeting",
+        "mitre_tactics",
+        "ioc_type",
+        "last_activity",
+        "analyst",
+        "relevant_to_vps"
+      ],
+      "filter": {}
+    },
+    {
+      "title": "APT Groups",
+      "viewType": "table",
+      "sortOptions": [
+        {
+          "propertyId": "last_activity",
+          "reversed": true
+        }
+      ],
+      "visiblePropertyIds": [
+        "confidence",
+        "targeting",
+        "mitre_tactics",
+        "first_seen",
+        "last_activity",
+        "source",
+        "mitre_link"
+      ],
+      "filter": {
+        "filters": [
+          {
+            "propertyId": "threat_type",
+            "condition": "includes",
+            "values": ["apt"]
+          }
+        ]
+      }
+    },
+    {
+      "title": "Relevant to VPS2.0",
+      "viewType": "gallery",
+      "sortOptions": [
+        {
+          "propertyId": "confidence",
+          "reversed": false
+        }
+      ],
+      "visiblePropertyIds": [
+        "threat_type",
+        "confidence",
+        "mitre_tactics",
+        "last_activity",
+        "analyst"
+      ],
+      "filter": {
+        "filters": [
+          {
+            "propertyId": "relevant_to_vps",
+            "condition": "includes",
+            "values": ["true"]
+          }
+        ]
+      }
+    },
+    {
+      "title": "Recent Activity",
+      "viewType": "calendar",
+      "dateDisplayPropertyId": "last_activity",
+      "sortOptions": [],
+      "visiblePropertyIds": [
+        "threat_type",
+        "confidence",
+        "targeting",
+        "analyst",
+        "relevant_to_vps"
+      ],
+      "filter": {}
+    }
+  ]
+}
