@@ -1,0 +1,6 @@
+# VPS2.0 Homepage Docker Configuration
+# Docker socket integration for container stats
+
+---
+docker-socket:
+  socket: /var/run/docker.sock

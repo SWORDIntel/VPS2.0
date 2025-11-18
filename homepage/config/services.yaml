@@ -1,0 +1,184 @@
+# VPS2.0 Homepage Services Configuration
+# TEMPEST Level C Compliant - All services with local-only widgets
+
+---
+# INTELLIGENCE OPERATIONS
+- INTELLIGENCE OPERATIONS:
+    - SWORDINTELLIGENCE:
+        icon: mdi-shield-lock-outline
+        href: https://{{HOMEPAGE_VAR_DOMAIN}}
+        description: PRIMARY INTELLIGENCE PLATFORM - TIER 1
+        widget:
+          type: customapi
+          url: http://swordintelligence:5000/health
+          method: GET
+        server: docker-socket
+        container: swordintelligence
+
+    - MISP:
+        icon: mdi-database-alert
+        href: https://misp.{{HOMEPAGE_VAR_DOMAIN}}
+        description: THREAT INTELLIGENCE SHARING - CLASSIFIED
+        widget:
+          type: customapi
+          url: http://misp/users/login
+          method: GET
+        server: docker-socket
+        container: misp
+
+    - OpenCTI:
+        icon: mdi-graph-outline
+        href: https://opencti.{{HOMEPAGE_VAR_DOMAIN}}
+        description: STRUCTURED THREAT INTEL - RESTRICTED
+        widget:
+          type: customapi
+          url: http://opencti:8080/health
+          method: GET
+        server: docker-socket
+        container: opencti
+
+# INFRASTRUCTURE
+- INFRASTRUCTURE:
+    - Portainer:
+        icon: mdi-docker
+        href: https://portainer.{{HOMEPAGE_VAR_DOMAIN}}
+        description: CONTAINER MANAGEMENT - ADMIN
+        widget:
+          type: portainer
+          url: http://portainer:9000
+          env: 1
+          key: {{HOMEPAGE_VAR_PORTAINER_KEY}}
+        server: docker-socket
+        container: portainer
+
+    - Caddy:
+        icon: mdi-shield-check
+        href: https://{{HOMEPAGE_VAR_DOMAIN}}
+        description: REVERSE PROXY - SECURE
+        widget:
+          type: customapi
+          url: http://caddy:2019/metrics
+          method: GET
+        server: docker-socket
+        container: caddy
+
+    - PostgreSQL:
+        icon: mdi-database-lock
+        description: PRIMARY DATABASE - ENCRYPTED
+        server: docker-socket
+        container: postgres
+
+# SECURITY & ANALYSIS
+- SECURITY & ANALYSIS:
+    - Cortex:
+        icon: mdi-brain
+        href: http://cortex:9001
+        description: OBSERVABLE ANALYSIS ENGINE
+        server: docker-socket
+        container: cortex
+
+    - n8n:
+        icon: mdi-workflow
+        href: https://n8n.{{HOMEPAGE_VAR_DOMAIN}}
+        description: AUTOMATION WORKFLOWS - CLASSIFIED
+        widget:
+          type: customapi
+          url: http://n8n:5678/healthz
+          method: GET
+        server: docker-socket
+        container: n8n
+
+    - ClamAV:
+        icon: mdi-virus-outline
+        description: ANTIVIRUS SCANNER - ACTIVE
+        server: docker-socket
+        container: clamav
+
+# MONITORING & LOGS
+- MONITORING & LOGS:
+    - Grafana:
+        icon: mdi-chart-line
+        href: https://monitoring.{{HOMEPAGE_VAR_DOMAIN}}
+        description: METRICS VISUALIZATION - LIVE
+        widget:
+          type: grafana
+          url: http://grafana:3000
+          username: {{HOMEPAGE_VAR_GRAFANA_USER}}
+          password: {{HOMEPAGE_VAR_GRAFANA_PASSWORD}}
+        server: docker-socket
+        container: grafana
+
+    - Uptime Kuma:
+        icon: mdi-heart-pulse
+        href: https://status.{{HOMEPAGE_VAR_DOMAIN}}
+        description: SERVICE STATUS - OPERATIONAL
+        widget:
+          type: uptimekuma
+          url: http://uptime-kuma:3001
+          slug: vps2
+        server: docker-socket
+        container: uptime-kuma
+
+    - Netdata:
+        icon: mdi-speedometer
+        href: https://netdata.{{HOMEPAGE_VAR_DOMAIN}}
+        description: REAL-TIME METRICS - LIVE
+        widget:
+          type: netdata
+          url: http://netdata:19999
+        server: docker-socket
+        container: netdata
+
+    - Dozzle:
+        icon: mdi-text-box-search
+        href: https://logs.{{HOMEPAGE_VAR_DOMAIN}}
+        description: DOCKER LOGS - REAL-TIME
+        server: docker-socket
+        container: dozzle
+
+# DEVELOPMENT
+- DEVELOPMENT:
+    - GitLab:
+        icon: mdi-gitlab
+        href: https://gitlab.{{HOMEPAGE_VAR_DOMAIN}}
+        description: SOURCE CODE & CI/CD - SECURE
+        widget:
+          type: gitlab
+          url: http://gitlab
+          key: {{HOMEPAGE_VAR_GITLAB_TOKEN}}
+        server: docker-socket
+        container: gitlab
+
+    - Container Registry:
+        icon: mdi-package-variant-closed
+        href: https://registry.{{HOMEPAGE_VAR_DOMAIN}}
+        description: DOCKER REGISTRY - PRIVATE
+        server: docker-socket
+        container: gitlab
+
+# OPTIONAL SERVICES
+- OPTIONAL SERVICES:
+    - HURRICANE:
+        icon: mdi-web
+        href: https://hurricane.{{HOMEPAGE_VAR_DOMAIN}}
+        description: IPv6 PROXY - OPTIONAL
+        widget:
+          type: customapi
+          url: http://hurricane:8080/api/health
+          method: GET
+        server: docker-socket
+        container: hurricane
+
+    - ARTICBASTION:
+        icon: mdi-castle
+        href: https://bastion.{{HOMEPAGE_VAR_DOMAIN}}
+        description: SECURE GATEWAY - FORTRESS
+        server: docker-socket
+        container: articbastion
+
+    - Glances:
+        icon: mdi-monitor-dashboard
+        href: https://glances.{{HOMEPAGE_VAR_DOMAIN}}
+        description: SYSTEM MONITOR - ADVANCED
+        server: docker-socket
+        container: glances

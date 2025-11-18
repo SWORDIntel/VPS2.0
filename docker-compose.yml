@@ -1,0 +1,534 @@
+version: '3.9'
+
+# VPS2.0 Complete Software Stack
+# Main docker-compose file for core infrastructure
+# Use docker-compose.override.yml for environment-specific overrides
+# Use docker-compose.*.yml for optional services
+
+#==============================================
+# Common Configurations
+#==============================================
+
+x-common-variables: &common-variables
+  TZ: UTC
+  PUID: 1000
+  PGID: 1000
+
+x-security-common: &security-common
+  security_opt:
+    - no-new-privileges:true
+    - apparmor:docker-default
+  cap_drop:
+    - ALL
+  tmpfs:
+    - /tmp
+    - /run
+
+x-restart-policy: &restart-policy
+  restart: unless-stopped
+
+x-logging: &logging
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+      compress: "true"
+
+#==============================================
+# Networks
+#==============================================
+
+networks:
+  dmz:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.30.0.0/24
+          gateway: 172.30.0.1
+    driver_opts:
+      com.docker.network.bridge.name: br-dmz
+
+  frontend:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/24
+          gateway: 172.20.0.1
+    driver_opts:
+      com.docker.network.bridge.name: br-frontend
+
+  backend:
+    driver: bridge
+    internal: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.21.0.0/24
+          gateway: 172.21.0.1
+    driver_opts:
+      com.docker.network.bridge.name: br-backend
+
+  monitoring:
+    driver: bridge
+    internal: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.22.0.0/24
+          gateway: 172.22.0.1
+    driver_opts:
+      com.docker.network.bridge.name: br-monitoring
+
+  isolated:
+    driver: bridge
+    internal: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.23.0.0/24
+          gateway: 172.23.0.1
+    driver_opts:
+      com.docker.network.bridge.name: br-isolated
+
+#==============================================
+# Services - Phase 1: Foundation
+#==============================================
+
+services:
+
+  #-------------------
+  # Reverse Proxy
+  #-------------------
+  caddy:
+    image: caddy:2-alpine
+    container_name: caddy
+    hostname: caddy
+    <<: [*restart-policy, *logging]
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - CHOWN
+      - SETUID
+      - SETGID
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"  # HTTP/3
+    environment:
+      <<: *common-variables
+      ACME_AGREE: "true"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy/config:/config
+      - caddy_data:/data
+      - caddy_logs:/logs
+    networks:
+      - dmz
+      - frontend
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:2019/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  #-------------------
+  # PostgreSQL
+  #-------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
+    hostname: postgres
+    <<: [*restart-policy, *logging]
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      <<: *common-variables
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Database password required}
+      POSTGRES_INITDB_ARGS: "--data-checksums --encoding=UTF8"
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./postgres/init-scripts:/docker-entrypoint-initdb.d:ro
+      - postgres_backups:/backups
+    networks:
+      - backend
+    shm_size: 256mb
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+
+  #-------------------
+  # PgBouncer
+  #-------------------
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    container_name: pgbouncer
+    hostname: pgbouncer
+    <<: [*restart-policy, *logging]
+    <<: *security-common
+    cap_add:
+      - SETUID
+      - SETGID
+    environment:
+      DB_HOST: postgres
+      DB_USER: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?Database password required}
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 1000
+      DEFAULT_POOL_SIZE: 25
+    networks:
+      - backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  #-------------------
+  # Redis Stack
+  #-------------------
+  redis-stack:
+    image: redis/redis-stack-server:latest
+    container_name: redis-stack
+    hostname: redis
+    <<: [*restart-policy, *logging]
+    <<: *security-common
+    cap_add:
+      - SETUID
+      - SETGID
+    environment:
+      <<: *common-variables
+      REDIS_ARGS: >-
+        --requirepass ${REDIS_PASSWORD:?Redis password required}
+        --appendonly yes
+        --appendfsync everysec
+        --maxmemory 2gb
+        --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  #-------------------
+  # Neo4j
+  #-------------------
+  neo4j:
+    image: neo4j:5-community
+    container_name: neo4j
+    hostname: neo4j
+    <<: [*restart-policy, *logging]
+    <<: *security-common
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+    environment:
+      <<: *common-variables
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:?Neo4j password required}
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+      NEO4J_dbms_memory_heap_max__size: 4G
+      NEO4J_dbms_memory_pagecache_size: 2G
+      NEO4J_dbms_security_procedures_unrestricted: "apoc.*,gds.*"
+      NEO4J_dbms_connector_bolt_enabled: "true"
+      NEO4J_dbms_connector_bolt_tls__level: OPTIONAL
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_plugins:/plugins
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "${NEO4J_PASSWORD}", "RETURN 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 2G
+
+  #-------------------
+  # Portainer
+  #-------------------
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    hostname: portainer
+    <<: [*restart-policy, *logging]
+    <<: *security-common
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+    command: --admin-password='${PORTAINER_PASSWORD_HASH:?Portainer password hash required}'
+    environment:
+      <<: *common-variables
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - portainer_data:/data
+    networks:
+      - frontend
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9000/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  #-------------------
+  # Watchtower (Auto-updates)
+  #-------------------
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: watchtower
+    hostname: watchtower
+    <<: [*restart-policy, *logging]
+    environment:
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_POLL_INTERVAL: 604800  # Weekly
+      WATCHTOWER_INCLUDE_STOPPED: "false"
+      WATCHTOWER_REVIVE_STOPPED: "false"
+      WATCHTOWER_NOTIFICATIONS: shoutrrr
+      WATCHTOWER_NOTIFICATION_URL: ${WATCHTOWER_NOTIFICATION_URL:-}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - backend
+
+  #-------------------
+  # VictoriaMetrics (Metrics)
+  #-------------------
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:latest
+    container_name: victoriametrics
+    hostname: victoriametrics
+    <<: [*restart-policy, *logging]
+    <<: *security-common
+    cap_add:
+      - CHOWN
+    command:
+      - -storageDataPath=/storage
+      - -retentionPeriod=90d
+      - -httpListenAddr=:8428
+      - -promscrape.config=/etc/prometheus/prometheus.yml
+    volumes:
+      - victoriametrics_data:/storage
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    networks:
+      - monitoring
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8428/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  #-------------------
+  # Grafana (Visualization)
+  #-------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    hostname: grafana
+    <<: [*restart-policy, *logging]
+    <<: *security-common
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+    environment:
+      <<: *common-variables
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?Grafana password required}
+      GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-piechart-panel
+      GF_SERVER_ROOT_URL: https://${DOMAIN:-localhost}/grafana
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - frontend
+      - monitoring
+    depends_on:
+      - victoriametrics
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+
+  #-------------------
+  # Loki (Logs)
+  #-------------------
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    hostname: loki
+    <<: [*restart-policy, *logging]
+    <<: *security-common
+    cap_add:
+      - CHOWN
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - loki_data:/loki
+      - ./loki/loki-config.yaml:/etc/loki/local-config.yaml:ro
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3100/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+
+  #-------------------
+  # Vector (Log Collector)
+  #-------------------
+  vector:
+    image: timberio/vector:latest-alpine
+    container_name: vector
+    hostname: vector
+    <<: [*restart-policy, *logging]
+    volumes:
+      - ./vector/vector.toml:/etc/vector/vector.toml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    networks:
+      - monitoring
+      - backend
+    depends_on:
+      - loki
+
+  #-------------------
+  # Node Exporter (System Metrics)
+  #-------------------
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    hostname: node-exporter
+    <<: [*restart-policy, *logging]
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    networks:
+      - monitoring
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  #-------------------
+  # cAdvisor (Container Metrics)
+  #-------------------
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    hostname: cadvisor
+    <<: [*restart-policy, *logging]
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    networks:
+      - monitoring
+    command:
+      - '--docker_only=true'
+      - '--housekeeping_interval=30s'
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+#==============================================
+# Volumes
+#==============================================
+
+volumes:
+  # Infrastructure
+  caddy_data:
+  caddy_logs:
+
+  # Databases
+  postgres_data:
+  postgres_backups:
+  neo4j_data:
+  neo4j_logs:
+  neo4j_plugins:
+  redis_data:
+
+  # Management
+  portainer_data:
+
+  # Monitoring
+  victoriametrics_data:
+  grafana_data:
+  loki_data:

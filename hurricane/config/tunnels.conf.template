@@ -1,0 +1,29 @@
+# HURRICANE Tunnel Configurations
+# Define your IPv6 tunnel backends here
+#
+# Tunnels are automatically configured via environment variables
+# during container startup. This template serves as a reference.
+#
+# Example configurations:
+#
+# [tunnel.he]
+# type = "hurricaneelectric"
+# username = "your_username"
+# password_file = "/etc/hurricane/credentials/he_password.enc"
+# tunnel_id = "123456"
+# enabled = true
+# priority = 100
+#
+# [tunnel.mullvad]
+# type = "mullvad"
+# account = "1234567890123456"
+# enabled = true
+# priority = 90
+#
+# [tunnel.wg0]
+# type = "wireguard"
+# config_file = "/etc/hurricane/wireguard/wg0.conf"
+# enabled = true
+# priority = 80
+#
+# Priority determines failover order (higher = preferred)

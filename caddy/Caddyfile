@@ -1,0 +1,505 @@
+# VPS2.0 Caddy Configuration
+# Secure reverse proxy with automatic HTTPS
+
+#==============================================
+# Global Configuration
+#==============================================
+{
+    # Email for Let's Encrypt notifications
+    email {$ADMIN_EMAIL:admin@localhost}
+
+    # ACME settings
+    acme_ca https://acme-v02.api.letsencrypt.org/directory
+    acme_ca_root /data/caddy/pki/authorities/acme/acme-v02.api.letsencrypt.org-directory/root.crt
+
+    # Server configuration
+    servers {
+        # Enable metrics endpoint
+        metrics
+
+        # Protocol support
+        protocols h1 h2 h3
+
+        # Timeouts
+        timeouts {
+            read_body 30s
+            read_header 10s
+            write 2m
+            idle 5m
+        }
+
+        # Max header size
+        max_header_size 16KB
+    }
+
+    # Logging
+    log {
+        output file /logs/caddy.log {
+            roll_size 100mb
+            roll_keep 10
+            roll_keep_days 30
+        }
+        format json
+        level INFO
+    }
+}
+
+#==============================================
+# Snippets (Reusable Configurations)
+#==============================================
+
+# Security headers
+(security_headers) {
+    header {
+        # HSTS
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+
+        # Prevent MIME sniffing
+        X-Content-Type-Options "nosniff"
+
+        # Prevent clickjacking
+        X-Frame-Options "SAMEORIGIN"
+
+        # XSS protection
+        X-XSS-Protection "1; mode=block"
+
+        # Referrer policy
+        Referrer-Policy "strict-origin-when-cross-origin"
+
+        # Permissions policy
+        Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=()"
+
+        # Content Security Policy
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'self';"
+
+        # Remove server header
+        -Server
+    }
+}
+
+# Rate limiting
+(rate_limit_standard) {
+    rate_limit {
+        zone standard {
+            key {remote_host}
+            events 100
+            window 1m
+        }
+    }
+}
+
+(rate_limit_strict) {
+    rate_limit {
+        zone strict {
+            key {remote_host}
+            events 30
+            window 1m
+        }
+    }
+}
+
+(rate_limit_api) {
+    rate_limit {
+        zone api {
+            key {remote_host}
+            events 60
+            window 1m
+        }
+    }
+}
+
+# Compression
+(compression) {
+    encode {
+        zstd
+        gzip 6
+        minimum_length 256
+    }
+}
+
+# Logging per site
+(access_log) {
+    log {
+        output file /logs/{args[0]}_access.log {
+            roll_size 50mb
+            roll_keep 5
+            roll_keep_days 14
+        }
+        format json
+    }
+}
+
+# Health check proxy settings
+(health_proxy) {
+    header_up X-Real-IP {remote_host}
+    header_up X-Forwarded-For {remote_host}
+    header_up X-Forwarded-Proto {scheme}
+    header_up X-Forwarded-Host {host}
+
+    health_uri /health
+    health_interval 30s
+    health_timeout 5s
+    health_status 200
+}
+
+# Standard proxy settings
+(standard_proxy) {
+    header_up X-Real-IP {remote_host}
+    header_up X-Forwarded-For {remote_host}
+    header_up X-Forwarded-Proto {scheme}
+    header_up X-Forwarded-Host {host}
+}
+
+#==============================================
+# Main Services
+#==============================================
+
+# SWORDINTELLIGENCE - Main Intelligence Platform (ROOT DOMAIN)
+{$DOMAIN:localhost} {
+    import security_headers
+    import rate_limit_standard
+    import compression
+    import access_log swordintel
+
+    # Handle WebSocket connections (SignalR)
+    @websockets {
+        header Connection *Upgrade*
+        header Upgrade websocket
+    }
+    reverse_proxy @websockets swordintelligence:5000 {
+        import standard_proxy
+    }
+
+    # API endpoints with stricter rate limiting
+    handle_path /api/* {
+        import rate_limit_api
+        reverse_proxy swordintelligence:5000 {
+            import health_proxy
+        }
+    }
+
+    # Main application
+    reverse_proxy swordintelligence:5000 {
+        import health_proxy
+    }
+
+    # Static file caching
+    @static {
+        path *.css *.js *.jpg *.jpeg *.png *.gif *.ico *.woff *.woff2 *.svg *.webp
+    }
+    header @static {
+        Cache-Control "public, max-age=31536000, immutable"
+    }
+}
+
+# Dashboard - Unified Control Center (SUBDOMAIN)
+dashboard.{$DOMAIN:localhost} {
+    import security_headers
+    import rate_limit_strict
+    import compression
+    import access_log dashboard
+
+    # TEMPEST Level C: Additional security headers
+    header {
+        X-Robots-Tag "noindex, nofollow, noarchive"
+        X-DNS-Prefetch-Control "off"
+        X-Download-Options "noopen"
+        Cross-Origin-Embedder-Policy "require-corp"
+        Cross-Origin-Opener-Policy "same-origin"
+        Cross-Origin-Resource-Policy "same-origin"
+    }
+
+    reverse_proxy homepage:3000 {
+        import standard_proxy
+    }
+}
+
+# Portainer - Container Management
+portainer.{$DOMAIN:localhost} {
+    import security_headers
+    import rate_limit_strict
+    import compression
+    import access_log portainer
+
+    reverse_proxy portainer:9000 {
+        import standard_proxy
+    }
+}
+
+# GitLab - Source Code Management
+gitlab.{$DOMAIN:localhost} {
+    import security_headers
+    import compression
+    import access_log gitlab
+
+    # Increase request body size for Git operations
+    request_body {
+        max_size 100MB
+    }
+
+    # Git LFS specific handling
+    handle_path /*.git/info/lfs/* {
+        request_body {
+            max_size 5GB
+        }
+        reverse_proxy gitlab:80 {
+            import standard_proxy
+            transport http {
+                response_header_timeout 600s
+            }
+        }
+    }
+
+    # Main GitLab
+    reverse_proxy gitlab:80 {
+        import standard_proxy
+        flush_interval -1
+        transport http {
+            dial_timeout 30s
+            response_header_timeout 300s
+        }
+    }
+}
+
+# GitLab Container Registry
+registry.{$DOMAIN:localhost} {
+    import security_headers
+    import access_log registry
+
+    request_body {
+        max_size 5GB
+    }
+
+    reverse_proxy gitlab:5050 {
+        import standard_proxy
+        header_down Docker-Distribution-Api-Version "registry/2.0"
+    }
+}
+
+# Grafana - Monitoring Dashboard
+monitoring.{$DOMAIN:localhost} {
+    import security_headers
+    import rate_limit_standard
+    import compression
+    import access_log monitoring
+
+    reverse_proxy grafana:3000 {
+        import standard_proxy
+    }
+}
+
+# MISP - Threat Intelligence
+misp.{$DOMAIN:localhost} {
+    import security_headers
+    import rate_limit_standard
+    import compression
+    import access_log misp
+
+    reverse_proxy misp:443 {
+        import standard_proxy
+        transport http {
+            tls_insecure_skip_verify
+        }
+    }
+}
+
+# OpenCTI - Structured Threat Intelligence
+opencti.{$DOMAIN:localhost} {
+    import security_headers
+    import rate_limit_standard
+    import compression
+    import access_log opencti
+
+    reverse_proxy opencti:8080 {
+        import standard_proxy
+    }
+}
+
+# n8n - Workflow Automation
+n8n.{$DOMAIN:localhost} {
+    import security_headers
+    import compression
+    import access_log n8n
+
+    # n8n webhooks
+    handle_path /webhook/* {
+        reverse_proxy n8n:5678 {
+            import standard_proxy
+        }
+    }
+
+    # Main n8n interface
+    reverse_proxy n8n:5678 {
+        import standard_proxy
+    }
+}
+
+# HURRICANE - IPv6 Proxy (Optional)
+hurricane.{$DOMAIN:localhost} {
+    import security_headers
+    import rate_limit_standard
+    import compression
+    import access_log hurricane
+
+    # API
+    handle_path /api/* {
+        import rate_limit_api
+        reverse_proxy hurricane:8080 {
+            import standard_proxy
+        }
+    }
+
+    # Web UI
+    reverse_proxy hurricane:8081 {
+        import standard_proxy
+    }
+}
+
+# ARTICBASTION - Secure Gateway Admin Panel
+bastion.{$DOMAIN:localhost} {
+    import security_headers
+    import rate_limit_strict
+    import access_log bastion
+
+    # Require client certificates for bastion access
+    tls {
+        client_auth {
+            mode require_and_verify
+            trusted_ca_cert_file /config/certs/ca.crt
+        }
+    }
+
+    # Additional security headers for bastion
+    header {
+        X-Frame-Options DENY
+        Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'"
+        X-Permitted-Cross-Domain-Policies none
+        Feature-Policy "geolocation 'none'; microphone 'none'; camera 'none'"
+    }
+
+    # IP whitelist (optional - uncomment and configure)
+    # @allowed {
+    #     remote_ip 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16
+    # }
+    # handle @allowed {
+    #     reverse_proxy articbastion:8443 {
+    #         import standard_proxy
+    #         transport http {
+    #             tls_insecure_skip_verify
+    #         }
+    #     }
+    # }
+    # respond 403
+
+    reverse_proxy articbastion:8443 {
+        import standard_proxy
+        transport http {
+            tls_insecure_skip_verify
+        }
+    }
+}
+
+# Mempool - Bitcoin Explorer
+mempool.{$DOMAIN:localhost} {
+    import security_headers
+    import compression
+    import access_log mempool
+
+    reverse_proxy mempool:4200 {
+        import standard_proxy
+    }
+}
+
+# Blockscout - Ethereum Explorer
+blockscout.{$DOMAIN:localhost} {
+    import security_headers
+    import compression
+    import access_log blockscout
+
+    reverse_proxy blockscout:4000 {
+        import standard_proxy
+    }
+}
+
+# Uptime Kuma - Service Monitoring
+status.{$DOMAIN:localhost} {
+    import security_headers
+    import compression
+    import access_log status
+
+    reverse_proxy uptime-kuma:3001 {
+        import standard_proxy
+    }
+}
+
+# Netdata - Real-time System Monitoring
+netdata.{$DOMAIN:localhost} {
+    import security_headers
+    import compression
+    import access_log netdata
+
+    reverse_proxy netdata:19999 {
+        import standard_proxy
+    }
+}
+
+# Dozzle - Docker Logs Viewer
+logs.{$DOMAIN:localhost} {
+    import security_headers
+    import compression
+    import access_log dozzle
+
+    reverse_proxy dozzle:8080 {
+        import standard_proxy
+    }
+}
+
+# Glances - Advanced System Monitor
+glances.{$DOMAIN:localhost} {
+    import security_headers
+    import compression
+    import access_log glances
+
+    reverse_proxy glances:61208 {
+        import standard_proxy
+    }
+}
+
+#==============================================
+# Admin & Monitoring Endpoints
+#==============================================
+
+# Caddy Metrics (Prometheus)
+metrics.{$DOMAIN:localhost} {
+    import security_headers
+
+    # Restrict to monitoring network or specific IPs
+    @allowed {
+        remote_ip 172.22.0.0/24 127.0.0.1
+    }
+
+    handle @allowed {
+        metrics /metrics
+    }
+
+    respond 403
+}
+
+#==============================================
+# Default/Catch-all
+#==============================================
+
+# Redirect HTTP to HTTPS
+http:// {
+    redir https://{host}{uri} permanent
+}
+
+# Default response for unknown hosts
+:443 {
+    respond "Not Found" 404
+}
+
+# Health check endpoint for load balancers
+:2019 {
+    metrics
+}

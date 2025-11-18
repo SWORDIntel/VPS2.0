@@ -1,0 +1,147 @@
+# VPS2.0 Prometheus Configuration
+# Scrapes metrics from all services
+
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+  scrape_timeout: 10s
+  external_labels:
+    cluster: 'vps2.0'
+    environment: 'production'
+
+# Alertmanager configuration (optional)
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets:
+#           - alertmanager:9093
+
+# Rule files (optional)
+# rule_files:
+#   - '/etc/prometheus/rules/*.yml'
+
+scrape_configs:
+
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:8428']
+        labels:
+          service: 'prometheus'
+
+  # Node Exporter - System metrics
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          service: 'node-exporter'
+
+  # cAdvisor - Container metrics
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          service: 'cadvisor'
+
+  # Caddy - Reverse proxy metrics
+  - job_name: 'caddy'
+    static_configs:
+      - targets: ['caddy:2019']
+        labels:
+          service: 'caddy'
+
+  # PostgreSQL - Database metrics
+  - job_name: 'postgres'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+        labels:
+          service: 'postgres'
+
+  # Redis - Cache metrics
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+        labels:
+          service: 'redis'
+
+  # Neo4j - Graph database metrics
+  - job_name: 'neo4j'
+    static_configs:
+      - targets: ['neo4j:2004']
+        labels:
+          service: 'neo4j'
+
+  # Docker Engine - Docker daemon metrics
+  - job_name: 'docker'
+    static_configs:
+      - targets: ['host.docker.internal:9323']
+        labels:
+          service: 'docker'
+
+  # SWORDINTELLIGENCE - Application metrics
+  - job_name: 'swordintelligence'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['swordintelligence:5000']
+        labels:
+          service: 'swordintelligence'
+
+  # HURRICANE - IPv6 proxy metrics (if enabled)
+  - job_name: 'hurricane'
+    static_configs:
+      - targets: ['hurricane:9090']
+        labels:
+          service: 'hurricane'
+
+  # GitLab - CI/CD metrics
+  - job_name: 'gitlab'
+    metrics_path: '/-/metrics'
+    static_configs:
+      - targets: ['gitlab:80']
+        labels:
+          service: 'gitlab'
+
+  # Grafana - Dashboard metrics
+  - job_name: 'grafana'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['grafana:3000']
+        labels:
+          service: 'grafana'
+
+  # Portainer - Container management metrics
+  - job_name: 'portainer'
+    static_configs:
+      - targets: ['portainer:9000']
+        labels:
+          service: 'portainer'
+
+  # Suricata - IDS metrics (if exporter configured)
+  - job_name: 'suricata'
+    static_configs:
+      - targets: ['suricata-exporter:9917']
+        labels:
+          service: 'suricata'
+
+  # CrowdSec - Security metrics
+  - job_name: 'crowdsec'
+    static_configs:
+      - targets: ['crowdsec:6060']
+        labels:
+          service: 'crowdsec'
+
+  # Elasticsearch - Search engine metrics
+  - job_name: 'elasticsearch'
+    static_configs:
+      - targets: ['opencti-elasticsearch:9200']
+        labels:
+          service: 'elasticsearch'
+    metrics_path: '/_prometheus/metrics'
+
+  # RabbitMQ - Message queue metrics
+  - job_name: 'rabbitmq'
+    static_configs:
+      - targets: ['opencti-rabbitmq:15692']
+        labels:
+          service: 'rabbitmq'
+    metrics_path: '/metrics'
