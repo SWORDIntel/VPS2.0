@@ -54,6 +54,21 @@ backup_databases() {
         docker-compose exec -T postgres pg_dump -U postgres "$db" | gzip > "${BACKUP_DIR}/databases/postgres_${db}.sql.gz"
     done
 
+    # Mattermost Database (if deployed)
+    if docker-compose -f docker-compose.mattermost.yml ps 2>/dev/null | grep -q mattermost-db; then
+        log_info "Backing up Mattermost PostgreSQL database..."
+        docker-compose -f docker-compose.mattermost.yml exec -T mattermost-db pg_dump -U mmuser mattermost | gzip > "${BACKUP_DIR}/databases/mattermost_postgres.sql.gz"
+    fi
+
+    # POLYGOTYA SQLite Database (if deployed)
+    if docker ps --format '{{.Names}}' | grep -q polygotya; then
+        log_info "Backing up POLYGOTYA SQLite database..."
+        docker exec polygotya sqlite3 /data/ssh_callbacks_secure.db ".backup /data/polygotya_backup.db"
+        docker cp polygotya:/data/polygotya_backup.db "${BACKUP_DIR}/databases/polygotya.db"
+        gzip "${BACKUP_DIR}/databases/polygotya.db"
+        docker exec polygotya rm -f /data/polygotya_backup.db
+    fi
+
     # Neo4j
     log_info "Backing up Neo4j..."
     docker-compose exec -T neo4j neo4j-admin database dump neo4j --to-stdout | gzip > "${BACKUP_DIR}/databases/neo4j.dump.gz"
@@ -96,6 +111,12 @@ backup_volumes() {
         "gitlab_data"
         "gitlab_config"
         "n8n_data"
+        "mattermost_data"
+        "mattermost_config"
+        "mattermost_logs"
+        "mattermost_plugins"
+        "mattermost_client_plugins"
+        "mattermost-minio_data"
     )
 
     for volume in "${volumes[@]}"; do
@@ -138,6 +159,23 @@ backup_configurations() {
     # HURRICANE configuration (if exists)
     if [[ -d "${PROJECT_ROOT}/hurricane/config" ]]; then
         cp -r "${PROJECT_ROOT}/hurricane/config" "${BACKUP_DIR}/configs/hurricane/"
+    fi
+
+    # Mattermost configuration (if deployed)
+    if [[ -d "${PROJECT_ROOT}/mattermost" ]]; then
+        log_info "Backing up Mattermost configuration..."
+        mkdir -p "${BACKUP_DIR}/configs/mattermost"
+        cp -r "${PROJECT_ROOT}/mattermost/boards" "${BACKUP_DIR}/configs/mattermost/" 2>/dev/null || true
+        cp "${PROJECT_ROOT}/docker-compose.mattermost.yml" "${BACKUP_DIR}/configs/" 2>/dev/null || true
+    fi
+
+    # POLYGOTYA configuration (if deployed)
+    if [[ -d "${PROJECT_ROOT}/ssh-callback-server" ]]; then
+        log_info "Backing up POLYGOTYA configuration..."
+        mkdir -p "${BACKUP_DIR}/configs/polygotya"
+        cp "${PROJECT_ROOT}/docker-compose.polygotya.yml" "${BACKUP_DIR}/configs/" 2>/dev/null || true
+        cp "${PROJECT_ROOT}/ssh-callback-server/Dockerfile.secure" "${BACKUP_DIR}/configs/polygotya/" 2>/dev/null || true
+        cp "${PROJECT_ROOT}/ssh-callback-server/.env.secure.example" "${BACKUP_DIR}/configs/polygotya/" 2>/dev/null || true
     fi
 
     # Host system configs

@@ -510,8 +510,54 @@ S3_SECRET_KEY=your_secret
 3. **Issues**: Open an issue on [GitHub](https://github.com/SWORDIntel/VPS2.0/issues)
 4. **Security**: Report security issues to security@swordintel.com
 
-### Useful Commands
+### Management Scripts
 
+**System Status & Health:**
+```bash
+# Quick status check
+./scripts/status.sh quick
+
+# Full system status
+./scripts/status.sh full
+
+# Service status only
+./scripts/status.sh services
+
+# Show service URLs
+./scripts/status.sh urls
+
+# Detailed deployment verification
+./scripts/verify-deployment.sh
+```
+
+**Backup & Restore:**
+```bash
+# Create full backup
+sudo ./scripts/backup.sh
+
+# Restore from backup
+sudo ./scripts/restore.sh /srv/backups/TIMESTAMP.tar.gz
+
+# Mattermost-specific backup
+./scripts/mattermost/backup.sh
+```
+
+**Service Operations:**
+```bash
+# Deploy entire platform
+sudo ./scripts/deploy.sh
+
+# Apply security hardening
+sudo ./scripts/harden.sh
+
+# Mattermost initial setup
+./scripts/mattermost/initial-setup.sh
+
+# Install Mattermost plugins (Boards, Playbooks, etc.)
+./scripts/mattermost/install-plugins.sh
+```
+
+**Useful Docker Commands:**
 ```bash
 # View service logs
 docker-compose logs -f [service]
