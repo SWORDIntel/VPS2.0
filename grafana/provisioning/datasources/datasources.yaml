@@ -1,0 +1,58 @@
+# Grafana Datasource Provisioning
+# Auto-configures all data sources
+
+apiVersion: 1
+
+datasources:
+  # VictoriaMetrics (Prometheus-compatible)
+  - name: VictoriaMetrics
+    type: prometheus
+    access: proxy
+    url: http://victoriametrics:8428
+    isDefault: true
+    editable: true
+    jsonData:
+      httpMethod: POST
+      timeInterval: 30s
+
+  # Loki for logs
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    editable: true
+    jsonData:
+      maxLines: 1000
+
+  # PostgreSQL
+  - name: PostgreSQL
+    type: postgres
+    url: pgbouncer:6432
+    database: swordintel
+    user: ${SWORDINTEL_DB_USER}
+    secureJsonData:
+      password: ${SWORDINTEL_DB_PASSWORD}
+    jsonData:
+      sslmode: prefer
+      postgresVersion: 1600
+      timescaledb: false
+    editable: true
+
+  # Elasticsearch (for OpenCTI)
+  - name: Elasticsearch
+    type: elasticsearch
+    access: proxy
+    url: http://opencti-elasticsearch:9200
+    database: "[opencti-]*"
+    jsonData:
+      interval: Daily
+      timeField: "@timestamp"
+      esVersion: "8.0.0"
+    editable: true
+
+  # Netdata
+  - name: Netdata
+    type: prometheus
+    access: proxy
+    url: http://netdata:19999/api/v1/allmetrics?format=prometheus
+    editable: true

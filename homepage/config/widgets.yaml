@@ -1,0 +1,45 @@
+# VPS2.0 Homepage Widgets Configuration
+# TEMPEST Level C - Local resources only, no external data
+
+---
+- resources:
+    backend: resources
+    expanded: true
+    cpu: true
+    memory: true
+    cputemp: true
+    tempmin: 0
+    tempmax: 100
+    uptime: true
+    units: metric
+    refresh: 3000
+    disk:
+      - /
+      - /srv/docker
+      - /srv/backups
+    label: SYSTEM RESOURCES
+
+- docker:
+    server: docker-socket
+    expanded: true
+
+- glances:
+    url: http://glances:61208
+    metric: cpu
+    refreshInterval: 5000
+    pointsLimit: 15
+    label: CPU UTILIZATION
+
+- glances:
+    url: http://glances:61208
+    metric: memory
+    refreshInterval: 5000
+    pointsLimit: 15
+    label: MEMORY USAGE
+
+- glances:
+    url: http://glances:61208
+    metric: network:eth0
+    refreshInterval: 5000
+    pointsLimit: 15
+    label: NETWORK THROUGHPUT

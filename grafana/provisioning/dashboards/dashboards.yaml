@@ -1,0 +1,16 @@
+# Grafana Dashboard Provisioning
+# Auto-loads all dashboards from the dashboards directory
+
+apiVersion: 1
+
+providers:
+  - name: 'VPS2.0 Dashboards'
+    orgId: 1
+    folder: 'VPS2.0'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: true

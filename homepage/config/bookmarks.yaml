@@ -1,0 +1,45 @@
+# VPS2.0 Homepage Bookmarks
+# TEMPEST Level C - Internal documentation only (no external links)
+
+---
+- DOCUMENTATION:
+    - Deployment Guide:
+        - icon: mdi-file-document
+          href: /docs/DEPLOYMENT_GUIDE.md
+          description: COMPLETE DEPLOYMENT INSTRUCTIONS
+    - Stack Architecture:
+        - icon: mdi-sitemap
+          href: /docs/STACK_ARCHITECTURE.md
+          description: TECHNICAL ARCHITECTURE DETAILS
+    - Security Procedures:
+        - icon: mdi-shield-alert
+          href: /docs/SECURITY.md
+          description: SECURITY PROTOCOLS - CLASSIFIED
+
+- THREAT INTELLIGENCE:
+    - MISP Console:
+        - icon: mdi-database-alert
+          href: https://misp.{{HOMEPAGE_VAR_DOMAIN}}
+          description: THREAT SHARING PLATFORM
+    - OpenCTI Console:
+        - icon: mdi-graph
+          href: https://opencti.{{HOMEPAGE_VAR_DOMAIN}}
+          description: STRUCTURED INTEL PLATFORM
+    - Analysis Workflows:
+        - icon: mdi-workflow
+          href: https://n8n.{{HOMEPAGE_VAR_DOMAIN}}
+          description: AUTOMATED ANALYSIS PIPELINES
+
+- MONITORING:
+    - Metrics Dashboard:
+        - icon: mdi-chart-line
+          href: https://monitoring.{{HOMEPAGE_VAR_DOMAIN}}
+          description: GRAFANA VISUALIZATION
+    - Service Status:
+        - icon: mdi-heart-pulse
+          href: https://status.{{HOMEPAGE_VAR_DOMAIN}}
+          description: UPTIME MONITORING
+    - Live Metrics:
+        - icon: mdi-speedometer
+          href: https://netdata.{{HOMEPAGE_VAR_DOMAIN}}
+          description: REAL-TIME SYSTEM METRICS

@@ -1,0 +1,170 @@
+# VPS2.0 Homepage Configuration - TEMPEST Level C Compliant
+# Government-spec unified dashboard with no external dependencies
+
+title: VPS2.0 INTELLIGENCE PLATFORM - CLASSIFIED
+favicon: data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>
+theme: dark
+color: slate
+
+# TEMPEST Level C: No external background images
+background:
+  blur: md
+  saturate: 0
+  brightness: 10
+  opacity: 100
+
+layout:
+  INTELLIGENCE OPERATIONS:
+    style: row
+    columns: 3
+    icon: mdi-shield-lock
+  INFRASTRUCTURE:
+    style: row
+    columns: 3
+    icon: mdi-server-network
+  SECURITY & ANALYSIS:
+    style: row
+    columns: 3
+    icon: mdi-security
+  MONITORING & LOGS:
+    style: row
+    columns: 4
+    icon: mdi-monitor-eye
+  DEVELOPMENT:
+    style: row
+    columns: 2
+    icon: mdi-code-braces
+  OPTIONAL SERVICES:
+    style: row
+    columns: 3
+    icon: mdi-hexagon-multiple
+
+# TEMPEST Level C: No external providers (weather, etc.)
+providers: {}
+
+headerStyle: boxed
+statusStyle: dot
+hideVersion: true
+showStats: true
+cardBlur: sm
+
+quicklaunch:
+  searchDescriptions: true
+  hideInternetSearch: true  # TEMPEST: No external searches
+  hideVisitURL: true
+
+# Widget settings - TEMPEST compliant (no external data)
+widgets:
+  - logo:
+      icon: data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛡️</text></svg>
+  - greeting:
+      text_size: xl
+      text: "CLASSIFIED - TEMPEST LEVEL C"
+  - datetime:
+      text_size: xl
+      format:
+        dateStyle: long
+        timeStyle: short
+        hour12: false
+        timeZone: UTC
+
+# TEMPEST Level C Custom CSS - Government Spec
+customCSS: |
+  /* TEMPEST Level C Styling */
+  :root {
+    --tempest-black: #000000;
+    --tempest-dark-gray: #0a0a0a;
+    --tempest-gray: #1a1a1a;
+    --tempest-light-gray: #2a2a2a;
+    --tempest-red: #ff0000;
+    --tempest-green: #00ff00;
+    --tempest-amber: #ffbf00;
+  }
+
+  body {
+    background: var(--tempest-black) !important;
+    color: var(--tempest-green) !important;
+    font-family: 'Courier New', monospace !important;
+  }
+
+  .service-card {
+    backdrop-filter: blur(10px);
+    background: rgba(10, 10, 10, 0.95) !important;
+    border: 2px solid var(--tempest-green) !important;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.3) !important;
+  }
+
+  .service-card:hover {
+    border-color: var(--tempest-amber) !important;
+    box-shadow: 0 0 20px rgba(255, 191, 0, 0.5) !important;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    color: var(--tempest-green) !important;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-weight: bold;
+  }
+
+  .widget {
+    background: var(--tempest-dark-gray) !important;
+    border: 1px solid var(--tempest-green) !important;
+    color: var(--tempest-green) !important;
+  }
+
+  /* Classification marking */
+  body::before {
+    content: "CLASSIFIED - TEMPEST LEVEL C - AUTHORIZED PERSONNEL ONLY";
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: var(--tempest-red);
+    color: var(--tempest-black);
+    text-align: center;
+    padding: 5px;
+    font-weight: bold;
+    z-index: 9999;
+    letter-spacing: 3px;
+  }
+
+  body::after {
+    content: "CLASSIFIED - TEMPEST LEVEL C";
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--tempest-red);
+    color: var(--tempest-black);
+    text-align: center;
+    padding: 5px;
+    font-weight: bold;
+    z-index: 9999;
+    letter-spacing: 3px;
+  }
+
+  /* Green terminal effect */
+  a {
+    color: var(--tempest-green) !important;
+    text-decoration: none;
+  }
+
+  a:hover {
+    color: var(--tempest-amber) !important;
+    text-shadow: 0 0 5px var(--tempest-amber);
+  }
+
+  /* Status indicators */
+  .status-dot {
+    box-shadow: 0 0 10px currentColor !important;
+  }
+
+  /* Minimal external resource usage */
+  img[src^="http"] {
+    display: none !important;
+  }
+
+  /* Terminal-style monospace */
+  * {
+    font-family: 'Courier New', 'Courier', monospace !important;
+  }

@@ -154,8 +154,8 @@
 # Main Services
 #==============================================
 
-# SWORDINTELLIGENCE - Main Intelligence Platform
-swordintel.{$DOMAIN:localhost} {
+# SWORDINTELLIGENCE - Main Intelligence Platform (ROOT DOMAIN)
+{$DOMAIN:localhost} {
     import security_headers
     import rate_limit_standard
     import compression
@@ -189,6 +189,28 @@ swordintel.{$DOMAIN:localhost} {
     }
     header @static {
         Cache-Control "public, max-age=31536000, immutable"
+    }
+}
+
+# Dashboard - Unified Control Center (SUBDOMAIN)
+dashboard.{$DOMAIN:localhost} {
+    import security_headers
+    import rate_limit_strict
+    import compression
+    import access_log dashboard
+
+    # TEMPEST Level C: Additional security headers
+    header {
+        X-Robots-Tag "noindex, nofollow, noarchive"
+        X-DNS-Prefetch-Control "off"
+        X-Download-Options "noopen"
+        Cross-Origin-Embedder-Policy "require-corp"
+        Cross-Origin-Opener-Policy "same-origin"
+        Cross-Origin-Resource-Policy "same-origin"
+    }
+
+    reverse_proxy homepage:3000 {
+        import standard_proxy
     }
 }
 
@@ -395,6 +417,50 @@ blockscout.{$DOMAIN:localhost} {
     import access_log blockscout
 
     reverse_proxy blockscout:4000 {
+        import standard_proxy
+    }
+}
+
+# Uptime Kuma - Service Monitoring
+status.{$DOMAIN:localhost} {
+    import security_headers
+    import compression
+    import access_log status
+
+    reverse_proxy uptime-kuma:3001 {
+        import standard_proxy
+    }
+}
+
+# Netdata - Real-time System Monitoring
+netdata.{$DOMAIN:localhost} {
+    import security_headers
+    import compression
+    import access_log netdata
+
+    reverse_proxy netdata:19999 {
+        import standard_proxy
+    }
+}
+
+# Dozzle - Docker Logs Viewer
+logs.{$DOMAIN:localhost} {
+    import security_headers
+    import compression
+    import access_log dozzle
+
+    reverse_proxy dozzle:8080 {
+        import standard_proxy
+    }
+}
+
+# Glances - Advanced System Monitor
+glances.{$DOMAIN:localhost} {
+    import security_headers
+    import compression
+    import access_log glances
+
+    reverse_proxy glances:61208 {
         import standard_proxy
     }
 }
