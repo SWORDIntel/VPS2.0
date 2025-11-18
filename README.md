@@ -10,20 +10,45 @@
 
 ## 🚀 Quick Start
 
+### One-Liner Installation (Recommended)
+
+Deploy the entire platform with a single command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/SWORDIntel/VPS2.0/main/install.sh | sudo bash
+```
+
+Or with verbose logging for monitoring progress:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/SWORDIntel/VPS2.0/main/install.sh | sudo bash -s -- --verbose
+```
+
+**Features:**
+- ✅ Automatic OS detection and prerequisites installation
+- ✅ Docker and Docker Compose setup
+- ✅ Interactive configuration wizard
+- ✅ Security hardening and credential generation
+- ✅ DNS verification and service deployment
+- ✅ Post-deployment health checks
+
+See [QUICK_START.md](./QUICK_START.md) for detailed options and troubleshooting.
+
+### Manual Installation (Advanced)
+
 ```bash
 # Clone the repository
 git clone https://github.com/SWORDIntel/VPS2.0.git
 cd VPS2.0
 
-# Deploy the stack
+# Run interactive setup wizard
+sudo ./scripts/setup-wizard.sh
+
+# Or deploy directly
 sudo ./scripts/deploy.sh
 
 # Apply security hardening
 sudo ./scripts/harden.sh
-
-# Configure automated backups
-sudo crontab -e
-# Add: 0 2 * * * /home/user/VPS2.0/scripts/backup.sh
 ```
 
 **That's it!** Your complete intelligence platform is now running.
