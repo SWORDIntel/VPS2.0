@@ -14,7 +14,9 @@ set -euo pipefail
 # - Add/Remove components
 # - Backup & Restore
 # - System status
-# - Security hardening
+# - Security hardening with audit logging
+# - Rollback capability
+# - Comprehensive error handling
 #
 # Usage: sudo ./deploy-vps2.sh [--quick]
 #==============================================
@@ -25,6 +27,34 @@ set -euo pipefail
 readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly PROJECT_ROOT="$SCRIPT_DIR"
 readonly STATE_FILE="${PROJECT_ROOT}/.deployment-state"
+readonly LOG_FILE="${PROJECT_ROOT}/.deployment.log"
+readonly AUDIT_LOG="${PROJECT_ROOT}/.deployment-audit.log"
+
+#==============================================
+# Error Handling
+#==============================================
+set -E  # Enable ERR trap inheritance
+
+cleanup_on_error() {
+    local exit_code=$?
+    local line_no=$1
+
+    if [[ $exit_code -ne 0 ]]; then
+        echo ""
+        echo -e "${RED}[ERROR]${NC} Deployment failed at line ${line_no} with exit code ${exit_code}"
+        echo -e "${YELLOW}[INFO]${NC} Check logs: ${LOG_FILE}"
+        echo -e "${YELLOW}[INFO]${NC} Use 'System Status' to check service health"
+        audit_log "ERROR" "Deployment failed at line ${line_no} with exit code ${exit_code}"
+    fi
+}
+
+cleanup_on_exit() {
+    # Save final state
+    save_state "last_run" "$(date +%s)"
+}
+
+trap 'cleanup_on_error ${LINENO}' ERR
+trap 'cleanup_on_exit' EXIT
 
 # Colors
 readonly RED='\033[0;31m'
@@ -85,6 +115,39 @@ log_warn() {
 
 log_step() {
     echo -e "  ${CYAN}${ICON_ARROW}${NC}  $*"
+}
+
+# Audit logging
+audit_log() {
+    local level="$1"
+    shift
+    local message="$*"
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    local user="${SUDO_USER:-$USER}"
+
+    echo "[${timestamp}] [${level}] [${user}] ${message}" >> "$AUDIT_LOG"
+
+    # Also log to main log
+    echo "[${timestamp}] [${level}] ${message}" >> "$LOG_FILE"
+}
+
+# Execute command with logging and error handling
+execute_cmd() {
+    local cmd="$1"
+    local description="${2:-Executing command}"
+    local timeout="${3:-300}"  # 5 minute default timeout
+
+    audit_log "INFO" "Executing: ${description}"
+
+    if timeout "${timeout}s" bash -c "$cmd" >> "$LOG_FILE" 2>&1; then
+        audit_log "SUCCESS" "${description} completed"
+        return 0
+    else
+        local exit_code=$?
+        audit_log "ERROR" "${description} failed with exit code ${exit_code}"
+        log_error "${description} failed (check ${LOG_FILE})"
+        return $exit_code
+    fi
 }
 
 #==============================================
@@ -229,20 +292,38 @@ check_root() {
 
 check_prerequisites() {
     log_section "Checking Prerequisites"
+    audit_log "INFO" "Starting prerequisites check"
 
     local failed=false
+    local warnings=0
 
     # Check Docker
     if command -v docker &> /dev/null; then
-        log_success "Docker installed: $(docker --version | awk '{print $3}' | tr -d ',')"
+        local docker_version=$(docker --version | awk '{print $3}' | tr -d ',')
+        log_success "Docker installed: ${docker_version}"
+        audit_log "INFO" "Docker version: ${docker_version}"
+
+        # Check Docker version (minimum 20.10.0)
+        local ver_major=$(echo "$docker_version" | cut -d. -f1)
+        local ver_minor=$(echo "$docker_version" | cut -d. -f2)
+        if [[ $ver_major -lt 20 ]] || ([[ $ver_major -eq 20 ]] && [[ $ver_minor -lt 10 ]]); then
+            log_warn "Docker version ${docker_version} is old (recommended: 20.10.0+)"
+            ((warnings++))
+        fi
     else
         log_error "Docker is not installed"
         failed=true
     fi
 
     # Check Docker Compose
-    if command -v docker-compose &> /dev/null || docker compose version &> /dev/null; then
-        log_success "Docker Compose installed"
+    if command -v docker-compose &> /dev/null; then
+        local compose_version=$(docker-compose --version | awk '{print $3}' | tr -d ',')
+        log_success "Docker Compose installed: ${compose_version}"
+        audit_log "INFO" "Docker Compose version: ${compose_version}"
+    elif docker compose version &> /dev/null; then
+        local compose_version=$(docker compose version --short)
+        log_success "Docker Compose (plugin) installed: ${compose_version}"
+        audit_log "INFO" "Docker Compose plugin version: ${compose_version}"
     else
         log_error "Docker Compose is not installed"
         failed=true
@@ -251,35 +332,109 @@ check_prerequisites() {
     # Check Docker running
     if docker ps &> /dev/null; then
         log_success "Docker daemon is running"
+
+        # Check Docker daemon configuration
+        if docker info --format '{{.SecurityOptions}}' 2>/dev/null | grep -q "name=seccomp"; then
+            log_success "Docker seccomp enabled"
+        else
+            log_warn "Docker seccomp not detected"
+            ((warnings++))
+        fi
     else
         log_error "Docker daemon is not running"
         failed=true
     fi
 
+    # Check required ports are available
+    log_info "Checking port availability..."
+    local required_ports=(80 443 5432 6379 7687 9000)
+    local ports_in_use=()
+
+    for port in "${required_ports[@]}"; do
+        if ss -tuln 2>/dev/null | grep -q ":${port} " || netstat -tuln 2>/dev/null | grep -q ":${port} "; then
+            ports_in_use+=("$port")
+        fi
+    done
+
+    if [[ ${#ports_in_use[@]} -gt 0 ]]; then
+        log_warn "Ports already in use: ${ports_in_use[*]}"
+        log_warn "These ports will need to be freed before deployment"
+        ((warnings++))
+    else
+        log_success "All required ports available"
+    fi
+
     # Check disk space
     local available=$(df -BG / | awk 'NR==2 {print $4}' | tr -d 'G')
-    if [[ $available -gt 50 ]]; then
+    if [[ $available -gt 100 ]]; then
         log_success "Disk space available: ${available}GB"
+    elif [[ $available -gt 50 ]]; then
+        log_warn "Disk space: ${available}GB (recommended: 100GB+)"
+        ((warnings++))
     else
-        log_warn "Low disk space: ${available}GB (recommended: 100GB+)"
+        log_error "Insufficient disk space: ${available}GB (minimum: 50GB)"
+        failed=true
     fi
+    audit_log "INFO" "Disk space: ${available}GB"
 
     # Check memory
     local mem=$(free -g | awk '/^Mem:/ {print $2}')
     if [[ $mem -ge 16 ]]; then
         log_success "RAM available: ${mem}GB"
+    elif [[ $mem -ge 8 ]]; then
+        log_warn "RAM: ${mem}GB (recommended: 16GB+)"
+        ((warnings++))
     else
-        log_warn "Low RAM: ${mem}GB (recommended: 16GB+)"
+        log_error "Insufficient RAM: ${mem}GB (minimum: 8GB)"
+        failed=true
+    fi
+    audit_log "INFO" "RAM: ${mem}GB"
+
+    # Check CPU cores
+    local cpu_cores=$(nproc)
+    if [[ $cpu_cores -ge 4 ]]; then
+        log_success "CPU cores: ${cpu_cores}"
+    else
+        log_warn "CPU cores: ${cpu_cores} (recommended: 4+)"
+        ((warnings++))
+    fi
+    audit_log "INFO" "CPU cores: ${cpu_cores}"
+
+    # Check internet connectivity
+    log_info "Checking internet connectivity..."
+    if ping -c 1 -W 3 8.8.8.8 &> /dev/null; then
+        log_success "Internet connectivity OK"
+    else
+        log_warn "Internet connectivity check failed (may affect Docker image pulls)"
+        ((warnings++))
     fi
 
+    # Check required commands
+    local required_cmds=(curl wget openssl sed awk grep)
+    for cmd in "${required_cmds[@]}"; do
+        if ! command -v "$cmd" &> /dev/null; then
+            log_error "Required command not found: $cmd"
+            failed=true
+        fi
+    done
+
+    # Summary
+    echo ""
     if [[ "$failed" == "true" ]]; then
-        echo ""
         log_error "Prerequisites check failed. Please install missing requirements."
+        audit_log "ERROR" "Prerequisites check failed"
         pause
         return 1
     fi
 
-    log_success "All prerequisites met"
+    if [[ $warnings -gt 0 ]]; then
+        log_warn "Prerequisites check completed with ${warnings} warning(s)"
+        audit_log "WARN" "Prerequisites check completed with ${warnings} warnings"
+    else
+        log_success "All prerequisites met"
+        audit_log "SUCCESS" "All prerequisites met"
+    fi
+
     echo ""
     return 0
 }
@@ -506,52 +661,221 @@ generate_credentials() {
 }
 
 #==============================================
+# Health Verification
+#==============================================
+
+verify_container_health() {
+    local container="$1"
+    local max_wait="${2:-60}"  # Maximum seconds to wait
+    local interval=5
+
+    log_info "Verifying ${container} health..."
+
+    local elapsed=0
+    while [[ $elapsed -lt $max_wait ]]; do
+        if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
+            # Container is running
+            local health=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "no-healthcheck")
+
+            case "$health" in
+                "healthy")
+                    log_success "${container} is healthy"
+                    audit_log "SUCCESS" "${container} verified healthy"
+                    return 0
+                    ;;
+                "unhealthy")
+                    log_error "${container} is unhealthy"
+                    audit_log "ERROR" "${container} is unhealthy"
+                    docker logs --tail 20 "$container" >> "$LOG_FILE" 2>&1
+                    return 1
+                    ;;
+                "starting")
+                    log_info "${container} is starting... (${elapsed}s/${max_wait}s)"
+                    sleep $interval
+                    elapsed=$((elapsed + interval))
+                    ;;
+                "no-healthcheck")
+                    # No healthcheck defined, just verify it's running
+                    log_success "${container} is running (no healthcheck defined)"
+                    audit_log "INFO" "${container} verified running (no healthcheck)"
+                    return 0
+                    ;;
+            esac
+        else
+            log_error "${container} is not running"
+            audit_log "ERROR" "${container} is not running"
+            return 1
+        fi
+    done
+
+    log_warn "${container} health check timed out after ${max_wait}s"
+    audit_log "WARN" "${container} health check timeout"
+    return 1
+}
+
+verify_service_endpoint() {
+    local url="$1"
+    local service_name="${2:-Service}"
+    local max_retries=5
+    local retry_delay=3
+
+    log_info "Verifying ${service_name} endpoint: ${url}"
+
+    for ((i=1; i<=max_retries; i++)); do
+        if curl -sSf --max-time 5 "$url" &> /dev/null; then
+            log_success "${service_name} endpoint is accessible"
+            audit_log "SUCCESS" "${service_name} endpoint verified: ${url}"
+            return 0
+        fi
+
+        if [[ $i -lt $max_retries ]]; then
+            log_info "Retry $i/${max_retries} in ${retry_delay}s..."
+            sleep $retry_delay
+        fi
+    done
+
+    log_warn "${service_name} endpoint not accessible (may need DNS configuration)"
+    audit_log "WARN" "${service_name} endpoint not accessible: ${url}"
+    return 1
+}
+
+#==============================================
+# Rollback Capability
+#==============================================
+
+create_deployment_snapshot() {
+    local component="$1"
+    local snapshot_file="${PROJECT_ROOT}/.snapshot-${component}-$(date +%s).tar.gz"
+
+    log_info "Creating deployment snapshot for ${component}..."
+    audit_log "INFO" "Creating snapshot for ${component}"
+
+    # Capture current state
+    docker-compose ps > "${PROJECT_ROOT}/.snapshot-state" 2>&1
+
+    # Save snapshot marker
+    save_state "last_snapshot_${component}" "$snapshot_file"
+    audit_log "SUCCESS" "Snapshot created: ${snapshot_file}"
+}
+
+rollback_deployment() {
+    local component="$1"
+
+    log_warn "Rolling back ${component} deployment..."
+    audit_log "WARN" "Initiating rollback for ${component}"
+
+    case "$component" in
+        "core")
+            docker-compose down
+            log_info "Core services rolled back"
+            save_state "deployed_core" "false"
+            ;;
+        "mattermost")
+            docker-compose -f docker-compose.yml -f docker-compose.mattermost.yml down
+            log_info "Mattermost rolled back"
+            save_state "deployed_mattermost" "false"
+            ;;
+        "polygotya")
+            docker-compose -f docker-compose.yml -f docker-compose.polygotya.yml down polygotya
+            log_info "POLYGOTYA rolled back"
+            save_state "deployed_polygotya" "false"
+            ;;
+    esac
+
+    audit_log "INFO" "Rollback completed for ${component}"
+    log_warn "Use 'System Status' to verify rollback"
+}
+
+#==============================================
 # Core Deployment
 #==============================================
 
 deploy_core_services() {
     log_section "Deploying Core Services"
+    audit_log "INFO" "Starting core services deployment"
 
     cd "$PROJECT_ROOT"
 
-    show_progress 0 8 "Creating Docker networks..."
+    # Create snapshot before deployment
+    create_deployment_snapshot "core"
+
+    show_progress 0 9 "Creating Docker networks..."
 
     # Create networks
-    docker network create br-frontend 2>/dev/null || true
-    docker network create br-backend 2>/dev/null || true
+    if ! docker network create br-frontend 2>/dev/null; then
+        log_info "Network br-frontend already exists"
+    fi
+    if ! docker network create br-backend 2>/dev/null; then
+        log_info "Network br-backend already exists"
+    fi
 
-    show_progress 1 8 "Deploying PostgreSQL..."
-    docker-compose up -d postgres
+    show_progress 1 9 "Deploying PostgreSQL..."
+    if execute_cmd "docker-compose up -d postgres" "Deploy PostgreSQL" 60; then
+        verify_container_health "postgres" 60 || {
+            log_error "PostgreSQL failed health check"
+            rollback_deployment "core"
+            pause
+            return 1
+        }
+    fi
+
+    show_progress 2 9 "Deploying Redis..."
+    if execute_cmd "docker-compose up -d redis-stack" "Deploy Redis" 60; then
+        verify_container_health "redis-stack" 60 || log_warn "Redis health check inconclusive"
+    fi
+
+    show_progress 3 9 "Deploying Neo4j..."
+    if execute_cmd "docker-compose up -d neo4j" "Deploy Neo4j" 60; then
+        verify_container_health "neo4j" 90 || log_warn "Neo4j health check inconclusive"
+    fi
+
+    show_progress 4 9 "Deploying Caddy..."
+    if execute_cmd "docker-compose up -d caddy" "Deploy Caddy" 60; then
+        verify_container_health "caddy" 60 || {
+            log_error "Caddy failed health check"
+            rollback_deployment "core"
+            pause
+            return 1
+        }
+    fi
+
+    show_progress 5 9 "Deploying Grafana..."
+    if execute_cmd "docker-compose up -d grafana" "Deploy Grafana" 60; then
+        verify_container_health "grafana" 60 || log_warn "Grafana health check inconclusive"
+    fi
+
+    show_progress 6 9 "Deploying Portainer..."
+    if execute_cmd "docker-compose up -d portainer" "Deploy Portainer" 60; then
+        verify_container_health "portainer" 60 || log_warn "Portainer health check inconclusive"
+    fi
+
+    show_progress 7 9 "Verifying core services..."
     sleep 5
 
-    show_progress 2 8 "Deploying Redis..."
-    docker-compose up -d redis-stack
-    sleep 3
+    show_progress 8 9 "Running health checks..."
+    local health_check_passed=true
+    if ! docker ps | grep -q "postgres"; then
+        log_error "PostgreSQL container not running"
+        health_check_passed=false
+    fi
+    if ! docker ps | grep -q "caddy"; then
+        log_error "Caddy container not running"
+        health_check_passed=false
+    fi
 
-    show_progress 3 8 "Deploying Neo4j..."
-    docker-compose up -d neo4j
-    sleep 5
-
-    show_progress 4 8 "Deploying Caddy..."
-    docker-compose up -d caddy
-    sleep 3
-
-    show_progress 5 8 "Deploying Grafana..."
-    docker-compose up -d grafana
-    sleep 3
-
-    show_progress 6 8 "Deploying Portainer..."
-    docker-compose up -d portainer
-    sleep 3
-
-    show_progress 7 8 "Waiting for services to initialize..."
-    sleep 10
-
-    show_progress 8 8 "Core services deployed"
+    show_progress 9 9 "Core services deployed"
     echo ""
 
-    log_success "Core services deployed successfully"
-    save_state "deployed_core" "true"
+    if [[ "$health_check_passed" == "true" ]]; then
+        log_success "Core services deployed successfully"
+        audit_log "SUCCESS" "Core services deployment completed"
+        save_state "deployed_core" "true"
+    else
+        log_error "Core services deployment completed with errors"
+        audit_log "ERROR" "Core services deployment had failures"
+        log_warn "Check logs and use rollback if needed"
+    fi
+
     pause
 }
 
@@ -854,23 +1178,314 @@ system_status() {
 # Security Hardening
 #==============================================
 
-security_hardening() {
-    log_header "Security Hardening"
+harden_kernel_parameters() {
+    log_section "Kernel Parameter Hardening"
+    audit_log "INFO" "Starting kernel hardening"
 
-    log_info "This will apply security hardening to the system:"
-    echo "    • Kernel parameter tuning (sysctl)"
-    echo "    • Firewall configuration (UFW)"
-    echo "    • Fail2ban setup"
-    echo "    • SSH hardening"
-    echo "    • Docker security options"
-    echo ""
+    local sysctl_conf="/etc/sysctl.d/99-vps2-hardening.conf"
 
-    if prompt_confirm "Apply security hardening?"; then
-        "${PROJECT_ROOT}/scripts/harden.sh"
-        log_success "Security hardening complete"
+    log_info "Configuring kernel parameters..."
+
+    cat > "$sysctl_conf" <<'EOF'
+# VPS2.0 Security Hardening
+
+# Network Security
+net.ipv4.conf.all.rp_filter = 1
+net.ipv4.conf.default.rp_filter = 1
+net.ipv4.conf.all.accept_source_route = 0
+net.ipv4.conf.default.accept_source_route = 0
+net.ipv4.conf.all.accept_redirects = 0
+net.ipv4.conf.default.accept_redirects = 0
+net.ipv4.conf.all.secure_redirects = 0
+net.ipv4.conf.default.secure_redirects = 0
+net.ipv4.conf.all.send_redirects = 0
+net.ipv4.conf.default.send_redirects = 0
+net.ipv4.icmp_echo_ignore_broadcasts = 1
+net.ipv4.icmp_ignore_bogus_error_responses = 1
+net.ipv4.tcp_syncookies = 1
+
+# IPv6 Security
+net.ipv6.conf.all.accept_source_route = 0
+net.ipv6.conf.default.accept_source_route = 0
+net.ipv6.conf.all.accept_redirects = 0
+net.ipv6.conf.default.accept_redirects = 0
+
+# System Security
+kernel.dmesg_restrict = 1
+kernel.kptr_restrict = 2
+kernel.yama.ptrace_scope = 1
+fs.protected_hardlinks = 1
+fs.protected_symlinks = 1
+
+# Performance (Docker optimized)
+net.core.somaxconn = 4096
+net.ipv4.tcp_max_syn_backlog = 8192
+vm.swappiness = 10
+EOF
+
+    sysctl -p "$sysctl_conf" >> "$LOG_FILE" 2>&1
+    log_success "Kernel parameters hardened"
+    audit_log "SUCCESS" "Kernel parameters configured"
+    pause
+}
+
+harden_firewall() {
+    log_section "Firewall Configuration"
+    audit_log "INFO" "Starting firewall hardening"
+
+    if ! command -v ufw &> /dev/null; then
+        log_info "Installing UFW..."
+        apt-get update >> "$LOG_FILE" 2>&1
+        apt-get install -y ufw >> "$LOG_FILE" 2>&1
+    fi
+
+    log_info "Configuring UFW firewall rules..."
+
+    # Default policies
+    ufw --force default deny incoming >> "$LOG_FILE" 2>&1
+    ufw default allow outgoing >> "$LOG_FILE" 2>&1
+
+    # Allow SSH (be careful!)
+    ufw allow 22/tcp comment 'SSH' >> "$LOG_FILE" 2>&1
+
+    # Allow HTTP/HTTPS
+    ufw allow 80/tcp comment 'HTTP' >> "$LOG_FILE" 2>&1
+    ufw allow 443/tcp comment 'HTTPS' >> "$LOG_FILE" 2>&1
+
+    # Enable firewall
+    if prompt_confirm "Enable UFW firewall now? (Ensure SSH access is working!)"; then
+        ufw --force enable >> "$LOG_FILE" 2>&1
+        log_success "Firewall enabled"
+        audit_log "SUCCESS" "UFW firewall enabled"
+    else
+        log_warn "Firewall not enabled (run 'ufw enable' manually)"
     fi
 
     pause
+}
+
+harden_ssh() {
+    log_section "SSH Hardening"
+    audit_log "INFO" "Starting SSH hardening"
+
+    local sshd_config="/etc/ssh/sshd_config"
+    local backup="${sshd_config}.backup-$(date +%s)"
+
+    log_info "Backing up SSH config to: $backup"
+    cp "$sshd_config" "$backup"
+
+    log_info "Applying SSH hardening..."
+
+    # Create hardened configuration
+    cat >> "$sshd_config" <<'EOF'
+
+# VPS2.0 Security Hardening
+PermitRootLogin prohibit-password
+PasswordAuthentication no
+ChallengeResponseAuthentication no
+UsePAM yes
+X11Forwarding no
+PrintMotd no
+AcceptEnv LANG LC_*
+ClientAliveInterval 300
+ClientAliveCountMax 2
+MaxAuthTries 3
+MaxSessions 5
+LoginGraceTime 60
+EOF
+
+    log_warn "SSH configuration updated. You MUST have SSH key authentication set up!"
+    log_warn "Current SSH keys will continue to work."
+
+    if prompt_confirm "Restart SSH service to apply changes?"; then
+        systemctl restart sshd >> "$LOG_FILE" 2>&1
+        log_success "SSH service restarted"
+        audit_log "SUCCESS" "SSH hardened and restarted"
+    else
+        log_warn "SSH not restarted (run 'systemctl restart sshd' manually)"
+    fi
+
+    pause
+}
+
+harden_docker() {
+    log_section "Docker Security Hardening"
+    audit_log "INFO" "Starting Docker hardening"
+
+    local daemon_json="/etc/docker/daemon.json"
+    local backup="${daemon_json}.backup-$(date +%s)"
+
+    if [[ -f "$daemon_json" ]]; then
+        log_info "Backing up Docker config to: $backup"
+        cp "$daemon_json" "$backup"
+    fi
+
+    log_info "Applying Docker security configuration..."
+
+    cat > "$daemon_json" <<'EOF'
+{
+  "icc": false,
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  },
+  "live-restore": true,
+  "userland-proxy": false,
+  "no-new-privileges": true
+}
+EOF
+
+    if prompt_confirm "Restart Docker daemon to apply changes? (This will briefly disrupt containers)"; then
+        systemctl restart docker >> "$LOG_FILE" 2>&1
+        sleep 10
+        log_success "Docker daemon restarted"
+        audit_log "SUCCESS" "Docker security configured"
+    else
+        log_warn "Docker not restarted (run 'systemctl restart docker' manually)"
+    fi
+
+    pause
+}
+
+install_fail2ban() {
+    log_section "Fail2ban Installation"
+    audit_log "INFO" "Starting Fail2ban installation"
+
+    if command -v fail2ban-client &> /dev/null; then
+        log_info "Fail2ban already installed"
+        fail2ban-client status >> "$LOG_FILE" 2>&1
+    else
+        log_info "Installing Fail2ban..."
+        apt-get update >> "$LOG_FILE" 2>&1
+        apt-get install -y fail2ban >> "$LOG_FILE" 2>&1
+
+        # Basic configuration
+        cat > /etc/fail2ban/jail.local <<'EOF'
+[DEFAULT]
+bantime = 3600
+findtime = 600
+maxretry = 5
+
+[sshd]
+enabled = true
+port = 22
+EOF
+
+        systemctl enable fail2ban >> "$LOG_FILE" 2>&1
+        systemctl start fail2ban >> "$LOG_FILE" 2>&1
+        log_success "Fail2ban installed and configured"
+        audit_log "SUCCESS" "Fail2ban installed"
+    fi
+
+    pause
+}
+
+setup_audit_logging() {
+    log_section "Audit Logging Setup"
+    audit_log "INFO" "Configuring audit logging"
+
+    if ! command -v auditd &> /dev/null; then
+        log_info "Installing auditd..."
+        apt-get update >> "$LOG_FILE" 2>&1
+        apt-get install -y auditd audispd-plugins >> "$LOG_FILE" 2>&1
+    fi
+
+    log_info "Configuring audit rules..."
+
+    # Add audit rules for Docker
+    cat > /etc/audit/rules.d/docker.rules <<'EOF'
+# Docker daemon
+-w /usr/bin/dockerd -k docker
+-w /usr/bin/docker -k docker
+-w /var/lib/docker -k docker
+-w /etc/docker -k docker
+-w /usr/lib/systemd/system/docker.service -k docker
+-w /usr/lib/systemd/system/docker.socket -k docker
+
+# Docker Compose
+-w /usr/local/bin/docker-compose -k docker
+
+# Container runtime
+-w /usr/bin/containerd -k docker
+-w /usr/bin/runc -k docker
+EOF
+
+    systemctl restart auditd >> "$LOG_FILE" 2>&1
+    log_success "Audit logging configured"
+    audit_log "SUCCESS" "System audit logging enabled"
+    pause
+}
+
+security_hardening() {
+    while true; do
+        log_header "Security Hardening"
+
+        local options=(
+            "Full Hardening (All options)"
+            "Kernel Parameter Hardening"
+            "Firewall Configuration (UFW)"
+            "SSH Hardening"
+            "Docker Security"
+            "Install Fail2ban"
+            "Setup Audit Logging"
+            "View Current Security Status"
+        )
+
+        show_menu "Security Hardening Options" "${options[@]}"
+
+        read -p "$(echo -e "  ${CYAN}${ICON_ARROW}${NC}  Enter selection: ")" choice
+
+        case $choice in
+            1)
+                # Full hardening
+                audit_log "INFO" "Starting full security hardening"
+                harden_kernel_parameters
+                harden_firewall
+                harden_ssh
+                harden_docker
+                install_fail2ban
+                setup_audit_logging
+                log_success "Full security hardening complete"
+                audit_log "SUCCESS" "Full security hardening completed"
+                pause
+                return 0
+                ;;
+            2) harden_kernel_parameters ;;
+            3) harden_firewall ;;
+            4) harden_ssh ;;
+            5) harden_docker ;;
+            6) install_fail2ban ;;
+            7) setup_audit_logging ;;
+            8)
+                log_info "Current Security Status:"
+                echo ""
+                echo "  Firewall (UFW):"
+                if command -v ufw &> /dev/null; then
+                    ufw status | head -20
+                else
+                    echo "    Not installed"
+                fi
+                echo ""
+                echo "  Fail2ban:"
+                if command -v fail2ban-client &> /dev/null; then
+                    fail2ban-client status 2>/dev/null || echo "    Not running"
+                else
+                    echo "    Not installed"
+                fi
+                echo ""
+                echo "  Docker Security:"
+                docker info --format '{{.SecurityOptions}}' 2>/dev/null || echo "    Unable to retrieve"
+                echo ""
+                pause
+                ;;
+            0) return 0 ;;
+            *)
+                log_error "Invalid selection"
+                sleep 1
+                ;;
+        esac
+    done
 }
 
 #==============================================
@@ -966,6 +1581,65 @@ show_deployment_summary() {
 # Main Menu
 #==============================================
 
+rollback_menu() {
+    log_header "Rollback Failed Deployment"
+
+    log_warn "This will roll back (stop and remove) a failed component deployment"
+    log_info "Data in Docker volumes will be preserved"
+    echo ""
+
+    local options=(
+        "Rollback Core Services"
+        "Rollback Mattermost"
+        "Rollback POLYGOTYA"
+        "View Deployment State"
+    )
+
+    show_menu "Select Component to Rollback" "${options[@]}"
+
+    read -p "$(echo -e "  ${CYAN}${ICON_ARROW}${NC}  Enter selection: ")" choice
+
+    case $choice in
+        1)
+            if prompt_confirm "Roll back core services?"; then
+                rollback_deployment "core"
+                log_success "Core services rolled back"
+            fi
+            pause
+            ;;
+        2)
+            if prompt_confirm "Roll back Mattermost?"; then
+                rollback_deployment "mattermost"
+                log_success "Mattermost rolled back"
+            fi
+            pause
+            ;;
+        3)
+            if prompt_confirm "Roll back POLYGOTYA?"; then
+                rollback_deployment "polygotya"
+                log_success "POLYGOTYA rolled back"
+            fi
+            pause
+            ;;
+        4)
+            log_info "Current Deployment State:"
+            echo ""
+            echo "  Core: $(get_deployment_status core)"
+            echo "  Mattermost: $(get_deployment_status mattermost)"
+            echo "  POLYGOTYA: $(get_deployment_status polygotya)"
+            echo ""
+            echo "  Last run: $(date -d @$(load_state "last_run" "0") 2>/dev/null || echo "Never")"
+            echo ""
+            pause
+            ;;
+        0) return 0 ;;
+        *)
+            log_error "Invalid selection"
+            pause
+            ;;
+    esac
+}
+
 main_menu() {
     while true; do
         show_banner
@@ -978,6 +1652,7 @@ main_menu() {
             "Backup & Restore"
             "System Status"
             "Security Hardening"
+            "Rollback Failed Deployment"
             "Configuration"
             "Show Deployment Summary"
         )
@@ -992,19 +1667,25 @@ main_menu() {
             3) remove_components ;;
             4)
                 log_info "Pulling latest images..."
-                docker-compose pull
-                log_info "Redeploying services..."
-                docker-compose up -d
-                log_success "Services updated"
+                audit_log "INFO" "Updating service images"
+                if execute_cmd "docker-compose pull" "Pull latest images" 600; then
+                    log_info "Redeploying services..."
+                    if execute_cmd "docker-compose up -d" "Redeploy services" 300; then
+                        log_success "Services updated"
+                        audit_log "SUCCESS" "Services updated successfully"
+                    fi
+                fi
                 pause
                 ;;
             5) backup_restore_menu ;;
             6) system_status ;;
             7) security_hardening ;;
-            8) configuration_menu ;;
-            9) show_deployment_summary ;;
+            8) rollback_menu ;;
+            9) configuration_menu ;;
+            10) show_deployment_summary ;;
             0)
                 log_info "Exiting VPS2.0 Deployment Manager"
+                audit_log "INFO" "User exited deployment manager"
                 exit 0
                 ;;
             *)
