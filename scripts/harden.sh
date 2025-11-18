@@ -38,13 +38,15 @@ log_warn() {
 
 harden_ssh() {
     log_info "Hardening SSH configuration..."
+    log_warn "Preserving port 22 for SSH as requested - NOT altering SSH port"
 
     # Backup original config
     cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup.$(date +%Y%m%d)
 
-    # Apply hardened SSH config
+    # Apply hardened SSH config (preserving port 22)
     cat > /etc/ssh/sshd_config.d/99-hardening.conf <<'EOF'
 # VPS2.0 SSH Hardening
+# NOTE: Port 22 is preserved and NOT altered per user requirements
 
 # Disable root login
 PermitRootLogin no

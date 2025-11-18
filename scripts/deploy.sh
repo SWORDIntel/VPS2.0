@@ -217,6 +217,7 @@ deploy_hurricane() {
 
 configure_firewall() {
     log_info "Configuring firewall..."
+    log_warn "Preserving port 22 for SSH - ensuring it remains accessible"
 
     # Check if UFW is installed
     if ! command -v ufw &> /dev/null; then
@@ -231,8 +232,8 @@ configure_firewall() {
     ufw default deny incoming
     ufw default allow outgoing
 
-    # Allow SSH (be careful!)
-    ufw allow 22/tcp comment "SSH"
+    # CRITICAL: Allow SSH on port 22 (user requirement - DO NOT ALTER)
+    ufw allow 22/tcp comment "SSH - DO NOT REMOVE"
 
     # Allow HTTP/HTTPS
     ufw allow 80/tcp comment "HTTP"
