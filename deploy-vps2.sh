@@ -291,6 +291,23 @@ setup_zfs() {
     log_warn "This should be done BEFORE deploying services"
     echo ""
 
+    # Auto-detect if ZFS is beneficial
+    local total_disks=$(lsblk -dpno NAME,TYPE | grep disk | wc -l)
+    local total_space=$(df -BG / | awk 'NR==2 {print $2}' | tr -d 'G')
+
+    log_info "System Analysis:"
+    echo "  • Available disks: $total_disks"
+    echo "  • Total space: ${total_space}GB"
+
+    if [[ $total_disks -gt 1 ]]; then
+        log_success "Multiple disks detected - ZFS HIGHLY RECOMMENDED for redundancy and snapshots"
+    elif [[ $total_space -gt 500 ]]; then
+        log_success "Large storage detected - ZFS recommended for compression and snapshots"
+    else
+        log_info "Single disk system - ZFS still beneficial for snapshots and compression"
+    fi
+    echo ""
+
     if ! prompt_confirm "Proceed with ZFS setup?"; then
         return 0
     fi
@@ -448,8 +465,47 @@ create_zfs_pool() {
     log_info "Creating ZFS pool..."
     echo ""
 
-    # List available disks again
-    log_info "Available disks (showing only unpartitioned disks):"
+    # Auto-detect available disks and suggest configuration
+    local available_disks=()
+    while IFS= read -r line; do
+        local disk=$(echo "$line" | awk '{print $1}')
+        # Skip the root disk
+        if ! mount | grep -q "^${disk}"; then
+            available_disks+=("$disk")
+        fi
+    done < <(lsblk -dpno NAME,TYPE | grep disk)
+
+    local disk_count=${#available_disks[@]}
+
+    log_info "Disk Analysis:"
+    echo "  • Total disks: $(lsblk -dpno NAME,TYPE | grep disk | wc -l)"
+    echo "  • Available for ZFS: $disk_count"
+    echo ""
+
+    if [[ $disk_count -eq 0 ]]; then
+        log_error "No available disks found for ZFS pool"
+        log_warn "All disks appear to be in use"
+        lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE
+        pause
+        return 1
+    fi
+
+    # Intelligent suggestions based on disk count
+    log_info "${BOLD}Recommended Configuration:${NC}"
+    if [[ $disk_count -eq 1 ]]; then
+        log_info "  → Single disk - Good for development/testing"
+        log_warn "  ⚠ No redundancy - consider backups!"
+    elif [[ $disk_count -eq 2 ]]; then
+        log_success "  → Mirror recommended - 50% space, can lose 1 disk"
+        log_info "  Alternative: Two separate pools (no redundancy)"
+    elif [[ $disk_count -ge 3 ]]; then
+        log_success "  → RAIDZ recommended - (n-1)/n space, can lose 1 disk"
+        log_info "  Alternative: RAIDZ2 (4+ disks) - can lose 2 disks"
+    fi
+    echo ""
+
+    # List available disks
+    log_info "Available disks for ZFS:"
     lsblk -dpno NAME,SIZE,TYPE | grep disk
     echo ""
 
@@ -963,14 +1019,70 @@ configure_domain() {
         return 1
     fi
 
-    # Test DNS resolution
-    log_info "Testing DNS resolution for $DOMAIN..."
-    if host "$DOMAIN" &> /dev/null; then
-        local ip=$(host "$DOMAIN" | awk '/has address/ {print $4; exit}')
-        log_success "Domain resolves to: $ip"
-    else
-        log_warn "Domain does not resolve yet (you can configure DNS later)"
+    # Intelligent DNS verification
+    log_info "Performing comprehensive DNS checks for $DOMAIN..."
+
+    # Get server's public IP
+    local server_ip=$(curl -s https://api.ipify.org 2>/dev/null || curl -s https://ifconfig.me 2>/dev/null)
+    if [[ -n "$server_ip" ]]; then
+        log_info "Server public IP: ${BOLD}$server_ip${NC}"
     fi
+
+    # Test main domain resolution
+    if host "$DOMAIN" &> /dev/null; then
+        local domain_ip=$(host "$DOMAIN" | awk '/has address/ {print $4; exit}')
+        log_success "Domain resolves to: $domain_ip"
+
+        # Compare with server IP
+        if [[ "$domain_ip" == "$server_ip" ]]; then
+            log_success "✓ DNS configured correctly - points to this server!"
+        else
+            log_warn "⚠ DNS points to different IP: $domain_ip (this server: $server_ip)"
+            log_warn "Update your DNS A record to point to: $server_ip"
+        fi
+    else
+        log_warn "Domain does not resolve yet"
+        log_info "Configure DNS A record: $DOMAIN → $server_ip"
+    fi
+
+    # Test critical subdomains
+    log_info "Checking subdomain DNS..."
+    local subdomains=("mattermost" "polygotya" "portainer" "grafana")
+    local dns_configured=0
+    local dns_total=0
+
+    for subdomain in "${subdomains[@]}"; do
+        ((dns_total++))
+        if host "${subdomain}.${DOMAIN}" &> /dev/null; then
+            local sub_ip=$(host "${subdomain}.${DOMAIN}" | awk '/has address/ {print $4; exit}')
+            if [[ "$sub_ip" == "$server_ip" ]]; then
+                log_success "  ✓ ${subdomain}.${DOMAIN} → $sub_ip"
+                ((dns_configured++))
+            else
+                log_warn "  ⚠ ${subdomain}.${DOMAIN} → $sub_ip (expected: $server_ip)"
+            fi
+        else
+            log_info "  - ${subdomain}.${DOMAIN} (not configured)"
+        fi
+    done
+
+    # DNS configuration summary
+    echo ""
+    log_info "${BOLD}DNS Configuration Status:${NC}"
+    if [[ $dns_configured -eq $dns_total ]]; then
+        log_success "  ✓ All subdomains configured correctly!"
+    elif [[ $dns_configured -gt 0 ]]; then
+        log_info "  → $dns_configured of $dns_total subdomains configured"
+    else
+        log_warn "  ⚠ No subdomains configured - you'll need to set up DNS"
+        echo ""
+        log_info "${BOLD}Required DNS Records (A records pointing to $server_ip):${NC}"
+        echo "    • $DOMAIN"
+        for subdomain in "${subdomains[@]}"; do
+            echo "    • ${subdomain}.${DOMAIN}"
+        done
+    fi
+    echo ""
 
     # Update .env
     if [[ -f "${PROJECT_ROOT}/.env" ]]; then
@@ -981,6 +1093,8 @@ configure_domain() {
     fi
 
     save_state "domain" "$DOMAIN"
+    save_state "server_ip" "$server_ip"
+    save_state "dns_configured" "$dns_configured"
     log_success "Domain configured: $DOMAIN"
     echo ""
 }
@@ -991,6 +1105,30 @@ configure_domain() {
 
 select_components() {
     log_section "Component Selection"
+
+    # Analyze system resources for intelligent recommendations
+    local mem=$(free -g | awk '/^Mem:/ {print $2}')
+    local cpu_cores=$(nproc)
+    local disk_space=$(df -BG / | awk 'NR==2 {print $4}' | tr -d 'G')
+
+    log_info "${BOLD}System Resource Analysis:${NC}"
+    echo "  • RAM: ${mem}GB"
+    echo "  • CPU Cores: ${cpu_cores}"
+    echo "  • Available Disk: ${disk_space}GB"
+    echo ""
+
+    # Intelligent recommendations based on resources
+    log_info "${BOLD}Component Recommendations:${NC}"
+    if [[ $mem -ge 16 ]] && [[ $cpu_cores -ge 4 ]] && [[ $disk_space -ge 100 ]]; then
+        log_success "  → System can handle ALL components comfortably"
+    elif [[ $mem -ge 8 ]] && [[ $cpu_cores -ge 2 ]]; then
+        log_info "  → System suitable for core services + 1-2 optional components"
+        log_warn "  ⚠ Adding all components may strain resources"
+    else
+        log_warn "  → Limited resources - recommend core services only"
+        log_warn "  ⚠ Optional components may cause performance issues"
+    fi
+    echo ""
 
     echo -e "  ${BOLD}Core Services${NC} (Required):"
     echo "    • Caddy (Reverse Proxy with TLS 1.3)"
@@ -1006,7 +1144,12 @@ select_components() {
     if [[ "$deploy_mattermost" == "true" ]]; then
         echo -e "    ${GREEN}[${ICON_CHECK}]${NC} Mattermost (Team Collaboration + Boards + Playbooks)"
     else
-        if prompt_confirm "Deploy Mattermost (Team Collaboration)?"; then
+        echo -e "  ${CYAN}1. Mattermost${NC} - Team Collaboration Platform"
+        echo "     Resource usage: ~2GB RAM, 10GB disk"
+        if [[ $mem -lt 4 ]]; then
+            echo "     ${YELLOW}⚠${NC}  Warning: Low RAM detected"
+        fi
+        if prompt_confirm "Deploy Mattermost?"; then
             deploy_mattermost="true"
             save_state "component_mattermost" "true"
             echo -e "    ${GREEN}[${ICON_CHECK}]${NC} Mattermost will be deployed"
@@ -1021,7 +1164,12 @@ select_components() {
     if [[ "$deploy_polygotya" == "true" ]]; then
         echo -e "    ${GREEN}[${ICON_CHECK}]${NC} POLYGOTYA (SSH Callback Server with PQC)"
     else
-        if prompt_confirm "Deploy POLYGOTYA (SSH Callback Server)?"; then
+        echo -e "  ${CYAN}2. POLYGOTYA${NC} - SSH Callback Server with Post-Quantum Crypto"
+        echo "     Resource usage: ~512MB RAM, 2GB disk"
+        if [[ $mem -ge 2 ]]; then
+            echo "     ${GREEN}✓${NC}  System has sufficient resources"
+        fi
+        if prompt_confirm "Deploy POLYGOTYA?"; then
             deploy_polygotya="true"
             save_state "component_polygotya" "true"
             echo -e "    ${GREEN}[${ICON_CHECK}]${NC} POLYGOTYA will be deployed"
@@ -1036,13 +1184,40 @@ select_components() {
     if [[ "$deploy_dnshub" == "true" ]]; then
         echo -e "    ${GREEN}[${ICON_CHECK}]${NC} DNS Hub (Technitium DNS + WireGuard VPN)"
     else
-        if prompt_confirm "Deploy DNS Hub (Technitium DNS + WireGuard)?"; then
+        echo -e "  ${CYAN}3. DNS Hub${NC} - Technitium DNS + WireGuard VPN"
+        echo "     Resource usage: ~1GB RAM, 5GB disk"
+        if [[ $mem -lt 4 ]]; then
+            echo "     ${YELLOW}⚠${NC}  Warning: Limited RAM available"
+        fi
+        if prompt_confirm "Deploy DNS Hub?"; then
             deploy_dnshub="true"
             save_state "component_dnshub" "true"
             echo -e "    ${GREEN}[${ICON_CHECK}]${NC} DNS Hub will be deployed"
         else
             echo -e "    ${YELLOW}[ ]${NC} DNS Hub will NOT be deployed"
         fi
+    fi
+    echo ""
+
+    # Show total resource estimate
+    local estimated_ram=4  # Core services baseline
+    local estimated_disk=30  # Core services baseline
+
+    [[ "$deploy_mattermost" == "true" ]] && { estimated_ram=$((estimated_ram + 2)); estimated_disk=$((estimated_disk + 10)); }
+    [[ "$deploy_polygotya" == "true" ]] && { estimated_ram=$((estimated_ram + 1)); estimated_disk=$((estimated_disk + 2)); }
+    [[ "$deploy_dnshub" == "true" ]] && { estimated_ram=$((estimated_ram + 1)); estimated_disk=$((estimated_disk + 5)); }
+
+    log_info "${BOLD}Estimated Total Resource Usage:${NC}"
+    echo "  • RAM: ~${estimated_ram}GB"
+    echo "  • Disk: ~${estimated_disk}GB"
+
+    if [[ $estimated_ram -gt $mem ]]; then
+        log_warn "  ⚠ Selected components may exceed available RAM!"
+        log_warn "  Consider removing some components or adding more memory"
+    elif [[ $((estimated_ram * 2)) -gt $mem ]]; then
+        log_info "  ℹ System will work but may have limited headroom"
+    else
+        log_success "  ✓ System has sufficient resources for selected components"
     fi
     echo ""
 
@@ -1295,6 +1470,60 @@ deploy_core_services() {
 
     cd "$PROJECT_ROOT"
 
+    # Smart pre-flight checks
+    log_info "Running pre-flight checks..."
+    local preflight_failed=false
+
+    # Check if .env exists
+    if [[ ! -f ".env" ]]; then
+        log_error ".env file not found - run credential generation first"
+        preflight_failed=true
+    fi
+
+    # Check for CHANGE_ME values
+    if [[ -f ".env" ]] && grep -q "CHANGE_ME" ".env"; then
+        log_warn "Found CHANGE_ME values in .env"
+        log_warn "Some credentials may not be configured"
+    fi
+
+    # Check Docker is running
+    if ! docker ps &> /dev/null; then
+        log_error "Docker is not running"
+        preflight_failed=true
+    fi
+
+    # Check disk space
+    local available=$(df -BG / | awk 'NR==2 {print $4}' | tr -d 'G')
+    if [[ $available -lt 20 ]]; then
+        log_error "Insufficient disk space: ${available}GB (need at least 20GB free)"
+        preflight_failed=true
+    elif [[ $available -lt 50 ]]; then
+        log_warn "Low disk space: ${available}GB (recommended: 50GB+ free)"
+    fi
+
+    # Check if ports are free
+    local ports_blocked=()
+    for port in 80 443; do
+        if ss -tuln 2>/dev/null | grep -q ":${port} " || netstat -tuln 2>/dev/null | grep -q ":${port} "; then
+            ports_blocked+=($port)
+        fi
+    done
+
+    if [[ ${#ports_blocked[@]} -gt 0 ]]; then
+        log_error "Required ports in use: ${ports_blocked[*]}"
+        log_warn "Stop services using these ports or deployment will fail"
+        preflight_failed=true
+    fi
+
+    if [[ "$preflight_failed" == "true" ]]; then
+        log_error "Pre-flight checks failed - cannot proceed"
+        pause
+        return 1
+    fi
+
+    log_success "Pre-flight checks passed"
+    echo ""
+
     # Create snapshot before deployment
     create_deployment_snapshot "core"
 
@@ -1444,6 +1673,37 @@ deploy_polygotya() {
 
 fresh_installation() {
     log_header "Fresh Installation - Guided Setup"
+
+    # Check for previous incomplete installation
+    local last_run=$(load_state "last_run" "0")
+    local deployed_core=$(load_state "deployed_core" "false")
+
+    if [[ "$deployed_core" == "false" ]] && [[ $last_run -gt 0 ]]; then
+        local last_run_date=$(date -d @$last_run '+%Y-%m-%d %H:%M:%S' 2>/dev/null || echo "unknown")
+        log_warn "Previous installation detected (last run: $last_run_date)"
+        log_warn "Installation appears incomplete"
+        echo ""
+
+        if prompt_confirm "Resume previous installation?"; then
+            log_info "Resuming from last checkpoint..."
+            # Check what's already done
+            local creds_done=$(load_state "credentials_generated" "false")
+
+            if [[ "$creds_done" == "false" ]]; then
+                log_info "Resuming from credential generation..."
+                generate_credentials
+            fi
+
+            log_info "Continuing with core services deployment..."
+            deploy_core_services
+            deploy_mattermost
+            deploy_polygotya
+            show_deployment_summary
+            return 0
+        else
+            log_info "Starting fresh installation..."
+        fi
+    fi
 
     log_info "This will guide you through a complete VPS2.0 installation"
     log_warn "Estimated time: 15-20 minutes"
