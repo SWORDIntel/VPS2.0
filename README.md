@@ -72,6 +72,11 @@ sudo ./scripts/harden.sh
 
 **That's it!** Your complete intelligence platform is now running.
 
+**📚 Deployment Guides:**
+- **[Quick Start Guide](./QUICKSTART.md)** - 5-minute deployment walkthrough
+- **[Deployment Checklist](./docs/DEPLOYMENT-CHECKLIST.md)** - Complete step-by-step checklist
+- **[Verification Script](./scripts/verify-deployment.sh)** - Post-deployment health checks
+
 ---
 
 ## 📋 Table of Contents
