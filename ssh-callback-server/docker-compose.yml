@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  ssh-callback-server:
+    build: .
+    container_name: polygottem-ssh-callback
+    restart: unless-stopped
+    ports:
+      - "5000:5000"  # Change external port if needed (e.g., "8080:5000")
+    volumes:
+      - ./data:/data  # Persistent database storage
+    environment:
+      - API_KEY=${API_KEY}  # Set in .env file
+      - PORT=5000
+      - DB_PATH=/data/ssh_callbacks.db
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - callback-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Nginx reverse proxy with SSL
+  nginx:
+    image: nginx:alpine
+    container_name: polygottem-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro  # Place SSL certs here
+    depends_on:
+      - ssh-callback-server
+    networks:
+      - callback-network
+    profiles:
+      - with-nginx  # Enable with: docker-compose --profile with-nginx up
+
+networks:
+  callback-network:
+    driver: bridge

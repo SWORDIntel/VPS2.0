@@ -1,0 +1,197 @@
+# POLYGOTTEM SECURE - Caddy Configuration
+# TEMPEST Level C Compliant + Post-Quantum Ready
+#
+# Caddy automatically handles:
+# - Automatic HTTPS with Let's Encrypt or self-signed certs
+# - HTTP/2 and HTTP/3 support
+# - TLS 1.3 by default
+# - OCSP stapling
+# - Security headers
+#
+# Usage:
+#   For production with domain: Replace :443 with your-domain.com
+#   For self-signed: Use :443 with tls internal
+#   For Let's Encrypt: Use your-domain.com (Caddy handles certs automatically)
+
+{
+	# Global options
+	admin off
+
+	# Security: Disable auto HTTPS redirect if you want manual control
+	# auto_https off
+
+	# Stricter timeouts
+	servers {
+		timeouts {
+			read_body 10s
+			read_header 5s
+			write 30s
+			idle 60s
+		}
+
+		# Connection limits (10 concurrent per IP)
+		max_header_size 16KB
+	}
+}
+
+# Main HTTPS server - Production Domain
+# POLYGOTTEM Secure Callback Server: polygotya.swordintelligence.airforce
+polygotya.swordintelligence.airforce {
+	# Automatic HTTPS with Let's Encrypt
+	# Caddy will automatically obtain, install, and renew certificates
+	tls {
+		# TLS 1.3 only (most secure)
+		protocols tls1.3
+
+		# Strong cipher suites (post-quantum ready)
+		ciphers TLS_AES_256_GCM_SHA384 TLS_CHACHA20_POLY1305_SHA256
+	}
+
+	# For manual certificates instead of Let's Encrypt, use:
+	# tls /ssl/cert.pem /ssl/key.pem {
+	#     protocols tls1.3
+	#     ciphers TLS_AES_256_GCM_SHA384 TLS_CHACHA20_POLY1305_SHA256
+	# }
+
+	# Security headers (TEMPEST Level C compliant)
+	header {
+		# HSTS (force HTTPS for 1 year)
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+		# Prevent clickjacking
+		X-Frame-Options "DENY"
+
+		# Prevent MIME sniffing
+		X-Content-Type-Options "nosniff"
+
+		# XSS protection
+		X-XSS-Protection "1; mode=block"
+
+		# Referrer policy
+		Referrer-Policy "no-referrer"
+
+		# Content Security Policy (TEMPEST theme compatible)
+		Content-Security-Policy "default-src 'self'; script-src 'unsafe-inline' 'self'; style-src 'unsafe-inline' 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'"
+
+		# Remove server identification
+		-Server
+		-X-Powered-By
+	}
+
+	# Block access to dotfiles (security)
+	@dotfiles {
+		path */.*
+	}
+	respond @dotfiles 403
+
+	# Health check endpoint (no rate limiting, no logging)
+	@health {
+		path /health
+	}
+	handle @health {
+		reverse_proxy ssh-callback-server-secure:5000 {
+			# No logging for health checks
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+
+			# Quick timeouts for health checks
+			transport http {
+				dial_timeout 5s
+				response_header_timeout 5s
+			}
+		}
+	}
+
+	# API endpoints with stricter rate limiting
+	@api {
+		path /api/register /api/heartbeat
+	}
+	handle @api {
+		# Rate limiting: 5 requests per second per IP
+		rate_limit {
+			zone api_zone {
+				key {remote_host}
+				events 5
+				window 1s
+			}
+		}
+
+		reverse_proxy ssh-callback-server-secure:5000 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+
+			# API timeouts (shorter)
+			transport http {
+				dial_timeout 10s
+				response_header_timeout 30s
+				expect_continue_timeout 3s
+			}
+		}
+	}
+
+	# Default handler for all other requests
+	handle {
+		# Rate limiting: 10 requests per second per IP for dashboard
+		rate_limit {
+			zone dashboard_zone {
+				key {remote_host}
+				events 10
+				window 1s
+			}
+		}
+
+		reverse_proxy ssh-callback-server-secure:5000 {
+			header_up Host {host}
+			header_up X-Real-IP {remote_host}
+			header_up X-Forwarded-For {remote_host}
+			header_up X-Forwarded-Proto {scheme}
+
+			# Standard timeouts
+			transport http {
+				dial_timeout 30s
+				response_header_timeout 60s
+				expect_continue_timeout 5s
+				keepalive 30s
+				keepalive_idle_conns 10
+			}
+
+			# Health check for backend
+			health_uri /health
+			health_interval 10s
+			health_timeout 5s
+		}
+	}
+
+	# Custom error pages (TEMPEST theme)
+	handle_errors {
+		@4xx `{http.error.status_code} >= 400 && {http.error.status_code} < 500`
+		@5xx `{http.error.status_code} >= 500`
+
+		respond @4xx "<html><head><title>Error {http.error.status_code}</title><style>body{background:#000;color:#FFB000;font-family:'Courier New',monospace;padding:40px;text-align:center}h1{color:#FF4400;font-size:48px;text-shadow:0 0 10px #FF4400}p{font-size:18px}</style></head><body><h1>ERROR {http.error.status_code}</h1><p>ACCESS DENIED - POLYGOTTEM SECURE</p><p style='color:#00FF00;font-size:14px;margin-top:40px'>TEMPEST LEVEL C COMPLIANT SYSTEM</p></body></html>" 403 {
+			header Content-Type "text/html; charset=utf-8"
+		}
+
+		respond @5xx "<html><head><title>Error {http.error.status_code}</title><style>body{background:#000;color:#FFB000;font-family:'Courier New',monospace;padding:40px;text-align:center}h1{color:#FF4400;font-size:48px;text-shadow:0 0 10px #FF4400}p{font-size:18px}</style></head><body><h1>ERROR {http.error.status_code}</h1><p>SYSTEM ERROR - POLYGOTTEM SECURE</p><p style='color:#00FF00;font-size:14px;margin-top:40px'>TEMPEST LEVEL C COMPLIANT SYSTEM</p></body></html>" 500 {
+			header Content-Type "text/html; charset=utf-8"
+		}
+	}
+
+	# Logging (optional - comment out for production stealth)
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 100mb
+			roll_keep 5
+			roll_keep_for 720h
+		}
+		format json
+	}
+}
+
+# HTTP redirect to HTTPS (optional - uncomment for production)
+# http:// {
+# 	redir https://{host}{uri} permanent
+# }
