@@ -1,0 +1,157 @@
+# Prometheus AlertManager Configuration for Mattermost Integration
+# Add this to your AlertManager configuration
+
+# Global configuration
+global:
+  resolve_timeout: 5m
+
+# Mattermost webhook receiver
+receivers:
+  - name: 'mattermost-alerts'
+    webhook_configs:
+      - url: 'https://mattermost.swordintelligence.airforce/hooks/WEBHOOK_ID_HERE'
+        send_resolved: true
+        http_config:
+          follow_redirects: true
+
+# Route configuration
+route:
+  receiver: 'mattermost-alerts'
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+
+  routes:
+    # Critical alerts (P0)
+    - match:
+        severity: critical
+      receiver: 'mattermost-alerts'
+      group_wait: 10s
+      group_interval: 5m
+      repeat_interval: 3h
+
+    # Warning alerts (P1)
+    - match:
+        severity: warning
+      receiver: 'mattermost-alerts'
+      group_wait: 30s
+      group_interval: 15m
+      repeat_interval: 12h
+
+    # Info alerts (P2)
+    - match:
+        severity: info
+      receiver: 'mattermost-alerts'
+      group_wait: 5m
+      group_interval: 1h
+      repeat_interval: 24h
+
+# Example alert rules to add to Prometheus
+# File: /etc/prometheus/alert_rules.yml
+---
+groups:
+  - name: vps2_alerts
+    interval: 30s
+    rules:
+      # High CPU usage
+      - alert: HighCPU
+        expr: 100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is {{ $value }}%"
+
+      # High memory usage
+      - alert: HighMemory
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 5m
+        labels:
+          severity: warning
+          service: system
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is {{ $value }}%"
+
+      # Container down
+      - alert: ContainerDown
+        expr: up{job="docker"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: docker
+        annotations:
+          summary: "Container {{ $labels.container }} is down"
+          description: "Container has been down for 2 minutes"
+
+      # DNS query failures
+      - alert: DNSQueryFailures
+        expr: rate(dns_queries_failed[5m]) > 10
+        for: 5m
+        labels:
+          severity: critical
+          service: dns
+        annotations:
+          summary: "High DNS query failure rate"
+          description: "{{ $value }} queries/sec failing"
+
+      # TLS certificate expiring
+      - alert: TLSCertExpiringSoon
+        expr: (probe_ssl_earliest_cert_expiry - time()) / 86400 < 30
+        for: 1h
+        labels:
+          severity: warning
+          service: caddy
+        annotations:
+          summary: "TLS certificate expiring soon"
+          description: "Certificate expires in {{ $value }} days"
+
+      # Mattermost down
+      - alert: MattermostDown
+        expr: up{job="mattermost"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          service: mattermost
+        annotations:
+          summary: "Mattermost is down"
+          description: "Mattermost has been unreachable for 2 minutes"
+
+      # Database connection issues
+      - alert: DatabaseConnectionErrors
+        expr: rate(postgres_errors_total[5m]) > 5
+        for: 5m
+        labels:
+          severity: critical
+          service: database
+        annotations:
+          summary: "High database error rate"
+          description: "{{ $value }} errors/sec on PostgreSQL"
+
+# Setup Instructions:
+#
+# 1. Create Incoming Webhook in Mattermost:
+#    - Go to Main Menu → Integrations → Incoming Webhooks
+#    - Click "Add Incoming Webhook"
+#    - Select channel: #alerts
+#    - Copy webhook URL
+#
+# 2. Update this config:
+#    - Replace WEBHOOK_ID_HERE with your webhook ID
+#
+# 3. Reload AlertManager:
+#    docker kill -s HUP alertmanager
+#
+# 4. Test alert:
+#    curl -H "Content-Type: application/json" -d '[{
+#      "labels": {
+#        "alertname": "TestAlert",
+#        "severity": "info"
+#      },
+#      "annotations": {
+#        "summary": "Test alert from AlertManager"
+#      }
+#    }]' http://localhost:9093/api/v1/alerts

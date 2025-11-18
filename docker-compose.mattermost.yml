@@ -1,0 +1,394 @@
+version: '3.9'
+
+# VPS2.0 - Mattermost Secure Team Collaboration
+# Deploy with: docker-compose -f docker-compose.yml -f docker-compose.mattermost.yml up -d
+
+#==============================================
+# Common Configurations
+#==============================================
+
+x-common-variables: &common-variables
+  TZ: UTC
+  PUID: 1000
+  PGID: 1000
+
+x-security-common: &security-common
+  security_opt:
+    - no-new-privileges:true
+    - apparmor:docker-default
+  cap_drop:
+    - ALL
+
+x-restart-policy: &restart-policy
+  restart: unless-stopped
+
+x-logging: &logging
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+      compress: "true"
+
+#==============================================
+# Networks
+#==============================================
+
+networks:
+  # Frontend: Caddy ↔ Mattermost only
+  frontend:
+    external: true
+
+  # Backend: Mattermost ↔ DB/Redis/MinIO (internal only)
+  mattermost_backend:
+    driver: bridge
+    internal: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.25.0.0/24
+          gateway: 172.25.0.1
+    driver_opts:
+      com.docker.network.bridge.name: br-mattermost
+
+  # Monitoring network
+  monitoring:
+    external: true
+
+#==============================================
+# Services
+#==============================================
+
+services:
+
+  #-------------------
+  # PostgreSQL Database (Mattermost-specific)
+  #-------------------
+  mattermost-db:
+    image: postgres:16-alpine
+    container_name: mattermost-db
+    hostname: mattermost-db
+    <<: [*restart-policy, *logging]
+    <<: *security-common
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    environment:
+      <<: *common-variables
+      POSTGRES_DB: mattermost
+      POSTGRES_USER: ${MATTERMOST_DB_USER:-mattermost}
+      POSTGRES_PASSWORD: ${MATTERMOST_DB_PASSWORD:?Mattermost database password required}
+      POSTGRES_INITDB_ARGS: "--data-checksums --encoding=UTF8 --locale=en_US.UTF-8"
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+    volumes:
+      - mattermost_db_data:/var/lib/postgresql/data
+      - ./mattermost/db/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - mattermost_db_backups:/backups
+    networks:
+      - mattermost_backend
+    shm_size: 256mb
+    command:
+      - postgres
+      - -c
+      - config_file=/etc/postgresql/postgresql.conf
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${MATTERMOST_DB_USER:-mattermost} -d mattermost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  #-------------------
+  # Redis Cache
+  #-------------------
+  mattermost-redis:
+    image: redis:7-alpine
+    container_name: mattermost-redis
+    hostname: mattermost-redis
+    <<: [*restart-policy, *logging]
+    <<: *security-common
+    cap_add:
+      - SETUID
+      - SETGID
+    environment:
+      <<: *common-variables
+    command:
+      - redis-server
+      - --requirepass
+      - ${MATTERMOST_REDIS_PASSWORD:?Mattermost Redis password required}
+      - --appendonly
+      - "yes"
+      - --appendfsync
+      - everysec
+      - --maxmemory
+      - 512mb
+      - --maxmemory-policy
+      - allkeys-lru
+    volumes:
+      - mattermost_redis_data:/data
+    networks:
+      - mattermost_backend
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  #-------------------
+  # MinIO Object Storage
+  #-------------------
+  mattermost-minio:
+    image: minio/minio:latest
+    container_name: mattermost-minio
+    hostname: mattermost-minio
+    <<: [*restart-policy, *logging]
+    <<: *security-common
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+    environment:
+      <<: *common-variables
+      MINIO_ROOT_USER: ${MATTERMOST_MINIO_ACCESS_KEY:?MinIO access key required}
+      MINIO_ROOT_PASSWORD: ${MATTERMOST_MINIO_SECRET_KEY:?MinIO secret key required}
+      MINIO_BROWSER: "on"
+      MINIO_DOMAIN: minio.${DOMAIN:-localhost}
+      MINIO_SERVER_URL: https://minio.${DOMAIN:-localhost}
+    command: server /data --console-address ":9001"
+    volumes:
+      - mattermost_minio_data:/data
+    networks:
+      - mattermost_backend
+      - frontend  # For admin console access
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+
+  #-------------------
+  # Mattermost Application
+  #-------------------
+  mattermost:
+    image: mattermost/mattermost-enterprise-edition:latest
+    container_name: mattermost
+    hostname: mattermost
+    <<: [*restart-policy, *logging]
+    <<: *security-common
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+      - NET_BIND_SERVICE
+    environment:
+      <<: *common-variables
+
+      # Database
+      MM_SQLSETTINGS_DRIVERNAME: postgres
+      MM_SQLSETTINGS_DATASOURCE: postgres://${MATTERMOST_DB_USER:-mattermost}:${MATTERMOST_DB_PASSWORD}@mattermost-db:5432/mattermost?sslmode=disable&connect_timeout=10
+      MM_SQLSETTINGS_MAXIDLECONNS: 20
+      MM_SQLSETTINGS_MAXOPENCONNS: 300
+      MM_SQLSETTINGS_QUERYTIMEOUT: 30
+
+      # Service Settings
+      MM_SERVICESETTINGS_SITEURL: https://mattermost.swordintelligence.airforce
+      MM_SERVICESETTINGS_LISTENADDRESS: ":8065"
+      MM_SERVICESETTINGS_ENABLELOCALMODE: "false"
+      MM_SERVICESETTINGS_ENABLEDEVELOPER: "false"
+      MM_SERVICESETTINGS_ENABLESECURITYFIXALERT: "true"
+      MM_SERVICESETTINGS_ENABLEINSECUREOUTGOINGCONNECTIONS: "false"
+      MM_SERVICESETTINGS_ENABLEMULTIFACTORAUTHENTICATION: "true"
+      MM_SERVICESETTINGS_ENFORCEEMULTIFACTORAUTHENTICATION: ${MATTERMOST_ENFORCE_MFA:-false}
+      MM_SERVICESETTINGS_SESSIONLENGTHMOBILEINDAYS: 30
+      MM_SERVICESETTINGS_SESSIONLENGTHWEBINDAYS: 7
+      MM_SERVICESETTINGS_SESSIONLENGTHMOBILEINDAYS: 30
+      MM_SERVICESETTINGS_SESSIONCACHEINMINUTES: 10
+      MM_SERVICESETTINGS_SESSIONIDLETIMEOUTINMINUTES: 60
+      MM_SERVICESETTINGS_ENABLEUSERACCESSTOKENS: "true"
+      MM_SERVICESETTINGS_ALLOWCORSFORM: ""
+      MM_SERVICESETTINGS_CORSEXPOSEDHEADERS: ""
+      MM_SERVICESETTINGS_CORSDEBUG: "false"
+      MM_SERVICESETTINGS_TLSMINVER: "1.3"
+      MM_SERVICESETTINGS_TLSSTRICTRANSPORT: "true"
+      MM_SERVICESETTINGS_TLSSTRICTTRANSPORTMAXAGE: 63072000
+      MM_SERVICESETTINGS_FORWARD80TO443: "false"  # Caddy handles this
+      MM_SERVICESETTINGS_READTIMEOUT: 300
+      MM_SERVICESETTINGS_WRITETIMEOUT: 300
+      MM_SERVICESETTINGS_IDLETIMEOUT: 60
+
+      # Team Settings
+      MM_TEAMSETTINGS_ENABLEOPENSERVER: "false"
+      MM_TEAMSETTINGS_ENABLEUSERCREATION: ${MATTERMOST_ENABLE_USER_CREATION:-false}
+      MM_TEAMSETTINGS_RESTRICTTOEMAILDOMAINS: ${MATTERMOST_RESTRICT_EMAIL_DOMAINS:-}
+      MM_TEAMSETTINGS_MAXUSERSPERTEAM: 150
+      MM_TEAMSETTINGS_MAXCHANNELSPERTEAM: 2000
+
+      # Logging
+      MM_LOGSETTINGS_ENABLECONSOLE: "true"
+      MM_LOGSETTINGS_CONSOLELEVEL: ${MATTERMOST_LOG_LEVEL:-INFO}
+      MM_LOGSETTINGS_CONSOLEJSON: "true"
+      MM_LOGSETTINGS_ENABLEFILE: "true"
+      MM_LOGSETTINGS_FILELEVEL: INFO
+      MM_LOGSETTINGS_FILEJSON: "true"
+      MM_LOGSETTINGS_FILELOCATION: /mattermost/logs
+      MM_LOGSETTINGS_ENABLEWEBHOOKDEBUGGING: "false"
+      MM_LOGSETTINGS_ENABLEDIAGNOSTICS: "false"
+
+      # File Storage (MinIO)
+      MM_FILESETTINGS_DRIVERNAME: amazons3
+      MM_FILESETTINGS_AMAZONS3ACCESSKEYID: ${MATTERMOST_MINIO_ACCESS_KEY}
+      MM_FILESETTINGS_AMAZONS3SECRETACCESSKEY: ${MATTERMOST_MINIO_SECRET_KEY}
+      MM_FILESETTINGS_AMAZONS3BUCKET: mattermost
+      MM_FILESETTINGS_AMAZONS3ENDPOINT: mattermost-minio:9000
+      MM_FILESETTINGS_AMAZONS3SSL: "false"  # Internal network
+      MM_FILESETTINGS_AMAZONS3SIGNV2: "false"
+      MM_FILESETTINGS_AMAZONS3REGION: us-east-1
+      MM_FILESETTINGS_MAXFILESIZE: 104857600  # 100MB
+      MM_FILESETTINGS_PUBLICLINKSALT: ${MATTERMOST_PUBLIC_LINK_SALT:?Public link salt required}
+
+      # Email Settings
+      MM_EMAILSETTINGS_ENABLESIGNUPWITHEMAIL: "true"
+      MM_EMAILSETTINGS_ENABLESIGNINWITHEMAIL: "true"
+      MM_EMAILSETTINGS_ENABLESIGNINWITHUSERNAME: "true"
+      MM_EMAILSETTINGS_SENDEMAILNOTIFICATIONS: ${MATTERMOST_SEND_EMAIL_NOTIFICATIONS:-true}
+      MM_EMAILSETTINGS_FEEDBACKEMAIL: ${MATTERMOST_FEEDBACK_EMAIL:-mattermost@${DOMAIN}}
+      MM_EMAILSETTINGS_REPLYTOADDRESS: ${MATTERMOST_REPLY_TO_ADDRESS:-noreply@${DOMAIN}}
+      MM_EMAILSETTINGS_SMTPSERVER: ${MATTERMOST_SMTP_SERVER:-}
+      MM_EMAILSETTINGS_SMTPPORT: ${MATTERMOST_SMTP_PORT:-587}
+      MM_EMAILSETTINGS_SMTPUSERNAME: ${MATTERMOST_SMTP_USERNAME:-}
+      MM_EMAILSETTINGS_SMTPPASSWORD: ${MATTERMOST_SMTP_PASSWORD:-}
+      MM_EMAILSETTINGS_ENABLESMTPAUTH: ${MATTERMOST_SMTP_AUTH:-true}
+      MM_EMAILSETTINGS_CONNECTIONSECURITY: ${MATTERMOST_SMTP_SECURITY:-STARTTLS}
+
+      # Rate Limiting
+      MM_RATELIMITSETTINGS_ENABLE: "true"
+      MM_RATELIMITSETTINGS_PERSEC: 10
+      MM_RATELIMITSETTINGS_MAXBURST: 100
+      MM_RATELIMITSETTINGS_MEMORYSTORESIZE: 10000
+
+      # Privacy
+      MM_PRIVACYSETTINGS_SHOWEMAILADDRESS: "false"
+      MM_PRIVACYSETTINGS_SHOWFULLNAME: "true"
+
+      # Password Settings
+      MM_PASSWORDSETTINGS_MINIMUMLENGTH: 12
+      MM_PASSWORDSETTINGS_LOWERCASE: "true"
+      MM_PASSWORDSETTINGS_NUMBER: "true"
+      MM_PASSWORDSETTINGS_UPPERCASE: "true"
+      MM_PASSWORDSETTINGS_SYMBOL: "true"
+
+      # Plugin Settings
+      MM_PLUGINSETTINGS_ENABLE: "true"
+      MM_PLUGINSETTINGS_ENABLEUPLOADS: "true"
+      MM_PLUGINSETTINGS_DIRECTORY: /mattermost/plugins
+      MM_PLUGINSETTINGS_CLIENTDIRECTORY: /mattermost/client/plugins
+
+      # Compliance & Audit
+      MM_COMPLIANCESETTINGS_ENABLE: ${MATTERMOST_COMPLIANCE_ENABLE:-false}
+      MM_COMPLIANCESETTINGS_DIRECTORY: /mattermost/compliance
+
+      # Announcement Settings
+      MM_ANNOUNCEMENTSETTINGS_ADMINNOTICESENABLED: "true"
+      MM_ANNOUNCEMENTSETTINGS_USERNOTICESENABLED: "true"
+
+    volumes:
+      - mattermost_config:/mattermost/config
+      - mattermost_data:/mattermost/data
+      - mattermost_logs:/mattermost/logs
+      - mattermost_plugins:/mattermost/plugins
+      - mattermost_client_plugins:/mattermost/client/plugins
+      - mattermost_bleve_indexes:/mattermost/bleve-indexes
+      - ./mattermost/config/config.json:/mattermost/config/config.json:ro
+    networks:
+      - frontend
+      - mattermost_backend
+    depends_on:
+      mattermost-db:
+        condition: service_healthy
+      mattermost-redis:
+        condition: service_healthy
+      mattermost-minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8065/api/v4/system/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+
+  #-------------------
+  # MinIO Setup (Initial Bucket Creation)
+  #-------------------
+  mattermost-minio-init:
+    image: minio/mc:latest
+    container_name: mattermost-minio-init
+    <<: *logging
+    <<: *security-common
+    environment:
+      MINIO_ACCESS_KEY: ${MATTERMOST_MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MATTERMOST_MINIO_SECRET_KEY}
+    entrypoint: >
+      /bin/sh -c "
+      until /usr/bin/mc config host add minio http://mattermost-minio:9000 $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY}; do
+        echo 'Waiting for MinIO...'
+        sleep 3
+      done;
+      /usr/bin/mc mb --ignore-existing minio/mattermost;
+      /usr/bin/mc policy set download minio/mattermost;
+      /usr/bin/mc admin user add minio mattermost $${MINIO_SECRET_KEY};
+      exit 0;
+      "
+    networks:
+      - mattermost_backend
+    depends_on:
+      - mattermost-minio
+
+#==============================================
+# Volumes
+#==============================================
+
+volumes:
+  # Database
+  mattermost_db_data:
+  mattermost_db_backups:
+
+  # Redis
+  mattermost_redis_data:
+
+  # MinIO Object Storage
+  mattermost_minio_data:
+
+  # Mattermost Application
+  mattermost_config:
+  mattermost_data:
+  mattermost_logs:
+  mattermost_plugins:
+  mattermost_client_plugins:
+  mattermost_bleve_indexes:

@@ -1,0 +1,420 @@
+{
+  "version": 1,
+  "title": "Investigation Case Tracker",
+  "description": "Track security investigations, incident analysis, and forensic cases",
+  "icon": "🔍",
+  "showDescription": true,
+  "isTemplate": true,
+  "templateVersion": 0,
+  "cardProperties": [
+    {
+      "id": "case_status",
+      "name": "Case Status",
+      "type": "select",
+      "options": [
+        {
+          "id": "new",
+          "value": "New",
+          "color": "propColorGray"
+        },
+        {
+          "id": "investigating",
+          "value": "Investigating",
+          "color": "propColorBlue"
+        },
+        {
+          "id": "evidence_collection",
+          "value": "Evidence Collection",
+          "color": "propColorYellow"
+        },
+        {
+          "id": "analysis",
+          "value": "Analysis",
+          "color": "propColorOrange"
+        },
+        {
+          "id": "remediation",
+          "value": "Remediation",
+          "color": "propColorPurple"
+        },
+        {
+          "id": "closed",
+          "value": "Closed",
+          "color": "propColorGreen"
+        },
+        {
+          "id": "false_positive",
+          "value": "False Positive",
+          "color": "propColorGray"
+        }
+      ]
+    },
+    {
+      "id": "priority",
+      "name": "Priority",
+      "type": "select",
+      "options": [
+        {
+          "id": "p0",
+          "value": "P0 - Critical",
+          "color": "propColorRed"
+        },
+        {
+          "id": "p1",
+          "value": "P1 - High",
+          "color": "propColorOrange"
+        },
+        {
+          "id": "p2",
+          "value": "P2 - Medium",
+          "color": "propColorYellow"
+        },
+        {
+          "id": "p3",
+          "value": "P3 - Low",
+          "color": "propColorGreen"
+        }
+      ]
+    },
+    {
+      "id": "case_type",
+      "name": "Case Type",
+      "type": "select",
+      "options": [
+        {
+          "id": "intrusion",
+          "value": "Intrusion/Breach",
+          "color": "propColorRed"
+        },
+        {
+          "id": "malware",
+          "value": "Malware Analysis",
+          "color": "propColorOrange"
+        },
+        {
+          "id": "data_exfil",
+          "value": "Data Exfiltration",
+          "color": "propColorPurple"
+        },
+        {
+          "id": "insider",
+          "value": "Insider Threat",
+          "color": "propColorPink"
+        },
+        {
+          "id": "policy_violation",
+          "value": "Policy Violation",
+          "color": "propColorYellow"
+        },
+        {
+          "id": "vulnerability",
+          "value": "Vulnerability Analysis",
+          "color": "propColorBlue"
+        },
+        {
+          "id": "threat_hunt",
+          "value": "Threat Hunt",
+          "color": "propColorTeal"
+        }
+      ]
+    },
+    {
+      "id": "lead_investigator",
+      "name": "Lead Investigator",
+      "type": "person"
+    },
+    {
+      "id": "team_members",
+      "name": "Team Members",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "security_ops",
+          "value": "Security Ops",
+          "color": "propColorRed"
+        },
+        {
+          "id": "incident_response",
+          "value": "Incident Response",
+          "color": "propColorOrange"
+        },
+        {
+          "id": "forensics",
+          "value": "Forensics",
+          "color": "propColorBlue"
+        },
+        {
+          "id": "threat_intel",
+          "value": "Threat Intel",
+          "color": "propColorPurple"
+        },
+        {
+          "id": "legal",
+          "value": "Legal",
+          "color": "propColorGray"
+        },
+        {
+          "id": "engineering",
+          "value": "Engineering",
+          "color": "propColorGreen"
+        }
+      ]
+    },
+    {
+      "id": "affected_assets",
+      "name": "Affected Assets",
+      "type": "multiSelect",
+      "options": [
+        {
+          "id": "dns_hub",
+          "value": "DNS Hub",
+          "color": "propColorBlue"
+        },
+        {
+          "id": "mattermost",
+          "value": "Mattermost",
+          "color": "propColorPurple"
+        },
+        {
+          "id": "hurricane",
+          "value": "HURRICANE",
+          "color": "propColorTeal"
+        },
+        {
+          "id": "articbastion",
+          "value": "ARTICBASTION",
+          "color": "propColorCyan"
+        },
+        {
+          "id": "cloudclear",
+          "value": "CLOUDCLEAR",
+          "color": "propColorPink"
+        },
+        {
+          "id": "grafana",
+          "value": "Grafana",
+          "color": "propColorOrange"
+        },
+        {
+          "id": "wireguard",
+          "value": "WireGuard VPN",
+          "color": "propColorGreen"
+        }
+      ]
+    },
+    {
+      "id": "evidence_preserved",
+      "name": "Evidence Preserved",
+      "type": "checkbox"
+    },
+    {
+      "id": "forensic_images",
+      "name": "Forensic Images Acquired",
+      "type": "checkbox"
+    },
+    {
+      "id": "timeline_complete",
+      "name": "Timeline Complete",
+      "type": "checkbox"
+    },
+    {
+      "id": "root_cause_identified",
+      "name": "Root Cause Identified",
+      "type": "checkbox"
+    },
+    {
+      "id": "case_opened",
+      "name": "Case Opened",
+      "type": "date"
+    },
+    {
+      "id": "case_closed",
+      "name": "Case Closed",
+      "type": "date"
+    },
+    {
+      "id": "incident_time",
+      "name": "Incident Time",
+      "type": "date"
+    },
+    {
+      "id": "playbook_run",
+      "name": "Playbook Run",
+      "type": "url"
+    },
+    {
+      "id": "gitlab_issue",
+      "name": "GitLab Tracking",
+      "type": "url"
+    },
+    {
+      "id": "case_id",
+      "name": "Case ID",
+      "type": "text"
+    },
+    {
+      "id": "initial_vector",
+      "name": "Initial Vector",
+      "type": "text"
+    }
+  ],
+  "views": [
+    {
+      "title": "Active Cases",
+      "viewType": "board",
+      "groupById": "case_status",
+      "sortOptions": [
+        {
+          "propertyId": "priority",
+          "reversed": false
+        }
+      ],
+      "visiblePropertyIds": [
+        "case_id",
+        "priority",
+        "case_type",
+        "lead_investigator",
+        "affected_assets",
+        "case_opened",
+        "playbook_run"
+      ],
+      "filter": {
+        "filters": [
+          {
+            "propertyId": "case_status",
+            "condition": "notIncludes",
+            "values": ["closed", "false_positive"]
+          }
+        ]
+      }
+    },
+    {
+      "title": "By Priority",
+      "viewType": "board",
+      "groupById": "priority",
+      "sortOptions": [
+        {
+          "propertyId": "case_opened",
+          "reversed": true
+        }
+      ],
+      "visiblePropertyIds": [
+        "case_id",
+        "case_type",
+        "case_status",
+        "lead_investigator",
+        "affected_assets",
+        "evidence_preserved",
+        "root_cause_identified"
+      ],
+      "filter": {}
+    },
+    {
+      "title": "P0 Critical Cases",
+      "viewType": "table",
+      "sortOptions": [
+        {
+          "propertyId": "case_opened",
+          "reversed": true
+        }
+      ],
+      "visiblePropertyIds": [
+        "case_id",
+        "case_type",
+        "case_status",
+        "lead_investigator",
+        "team_members",
+        "affected_assets",
+        "incident_time",
+        "evidence_preserved",
+        "forensic_images",
+        "timeline_complete",
+        "root_cause_identified",
+        "playbook_run",
+        "gitlab_issue"
+      ],
+      "filter": {
+        "filters": [
+          {
+            "propertyId": "priority",
+            "condition": "includes",
+            "values": ["p0"]
+          }
+        ]
+      }
+    },
+    {
+      "title": "Evidence Checklist",
+      "viewType": "table",
+      "sortOptions": [
+        {
+          "propertyId": "case_opened",
+          "reversed": true
+        }
+      ],
+      "visiblePropertyIds": [
+        "case_id",
+        "priority",
+        "case_type",
+        "lead_investigator",
+        "evidence_preserved",
+        "forensic_images",
+        "timeline_complete",
+        "root_cause_identified",
+        "case_status"
+      ],
+      "filter": {
+        "filters": [
+          {
+            "propertyId": "case_status",
+            "condition": "notIncludes",
+            "values": ["closed", "false_positive"]
+          }
+        ]
+      }
+    },
+    {
+      "title": "Timeline View",
+      "viewType": "calendar",
+      "dateDisplayPropertyId": "incident_time",
+      "sortOptions": [],
+      "visiblePropertyIds": [
+        "case_id",
+        "priority",
+        "case_type",
+        "case_status",
+        "lead_investigator",
+        "affected_assets"
+      ],
+      "filter": {}
+    },
+    {
+      "title": "Closed Cases Archive",
+      "viewType": "table",
+      "sortOptions": [
+        {
+          "propertyId": "case_closed",
+          "reversed": true
+        }
+      ],
+      "visiblePropertyIds": [
+        "case_id",
+        "priority",
+        "case_type",
+        "lead_investigator",
+        "case_opened",
+        "case_closed",
+        "gitlab_issue"
+      ],
+      "filter": {
+        "filters": [
+          {
+            "propertyId": "case_status",
+            "condition": "includes",
+            "values": ["closed"]
+          }
+        ]
+      }
+    }
+  ]
+}

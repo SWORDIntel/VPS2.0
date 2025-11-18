@@ -288,6 +288,123 @@ monitoring.{$DOMAIN:localhost} {
     }
 }
 
+# GRAFANA - Specific swordintelligence.airforce subdomain
+GRAFANA.swordintelligence.airforce {
+    import security_headers
+    import rate_limit_standard
+    import compression
+    import access_log grafana
+
+    reverse_proxy grafana:3000 {
+        import standard_proxy
+    }
+}
+
+# MATTERMOST - Secure Team Collaboration
+mattermost.swordintelligence.airforce {
+    import security_headers
+    import rate_limit_standard
+    import compression
+    import access_log mattermost
+
+    # TEMPEST Level C + Strong Crypto
+    header {
+        # TLS 1.3 only with strong ciphers (enforced at TLS layer)
+        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+
+        # Enhanced security headers
+        X-Frame-Options SAMEORIGIN
+        X-Content-Type-Options nosniff
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy strict-origin-when-cross-origin
+
+        # CSP for Mattermost
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' wss://mattermost.swordintelligence.airforce; frame-ancestors 'self';"
+
+        # Permissions Policy
+        Permissions-Policy "geolocation=(), microphone=(), camera=(self), payment=(), usb=()"
+
+        # Cookie security
+        X-Download-Options noopen
+        X-Permitted-Cross-Domain-Policies none
+    }
+
+    # WebSocket support for real-time messaging
+    @websockets {
+        header Connection *Upgrade*
+        header Upgrade websocket
+        path /api/v4/websocket
+    }
+
+    handle @websockets {
+        reverse_proxy mattermost:8065 {
+            import standard_proxy
+            header_up Upgrade {http.request.header.Upgrade}
+            header_up Connection {http.request.header.Connection}
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-For {remote_host}
+
+            # WebSocket-specific timeouts
+            transport http {
+                read_timeout 300s
+                write_timeout 300s
+            }
+        }
+    }
+
+    # API endpoints
+    handle_path /api/* {
+        import rate_limit_api
+        reverse_proxy mattermost:8065 {
+            import standard_proxy
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
+        }
+    }
+
+    # Plugin routes
+    handle_path /plugins/* {
+        reverse_proxy mattermost:8065 {
+            import standard_proxy
+        }
+    }
+
+    # Main application
+    reverse_proxy mattermost:8065 {
+        import standard_proxy
+        header_up X-Forwarded-Proto {scheme}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Real-IP {remote_host}
+
+        # Health check
+        health_uri /api/v4/system/ping
+        health_interval 30s
+        health_timeout 5s
+        health_status 200
+    }
+
+    # Static file caching
+    @static {
+        path *.css *.js *.jpg *.jpeg *.png *.gif *.ico *.woff *.woff2 *.svg *.webp *.ttf *.eot
+    }
+    header @static {
+        Cache-Control "public, max-age=31536000, immutable"
+    }
+}
+
+# MinIO Admin Console (Optional - for Mattermost object storage)
+minio.{$DOMAIN:localhost} {
+    import security_headers
+    import rate_limit_strict
+    import compression
+    import access_log minio
+
+    reverse_proxy mattermost-minio:9001 {
+        import standard_proxy
+    }
+}
+
 # MISP - Threat Intelligence
 misp.{$DOMAIN:localhost} {
     import security_headers
@@ -566,6 +683,145 @@ CLOUDCLEAR.swordintelligence.airforce {
     # Serve web UI and static assets
     reverse_proxy cloudclear:8080 {
         import standard_proxy
+    }
+}
+
+#==============================================
+# DNS Intelligence Hub
+#==============================================
+
+# Technitium DNS Web UI
+dns.{$DOMAIN:localhost} {
+    import security_headers
+    import rate_limit_strict
+    import compression
+    import access_log dns
+
+    # TEMPEST Level C: Maximum security headers
+    header {
+        X-Frame-Options DENY
+        X-Robots-Tag "noindex, nofollow, noarchive"
+        X-DNS-Prefetch-Control "off"
+        X-Download-Options "noopen"
+        Cross-Origin-Embedder-Policy "require-corp"
+        Cross-Origin-Opener-Policy "same-origin"
+        Cross-Origin-Resource-Policy "same-origin"
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';"
+    }
+
+    # IP whitelist - Only allow access from WireGuard subnet and local
+    @allowed {
+        remote_ip 10.10.0.0/24 127.0.0.1 172.24.0.0/24
+    }
+
+    handle @allowed {
+        # Handle WebSocket connections for real-time updates
+        @websockets {
+            header Connection *Upgrade*
+            header Upgrade websocket
+        }
+
+        handle @websockets {
+            reverse_proxy localhost:5380 {
+                import standard_proxy
+                header_up Upgrade {http.request.header.Upgrade}
+                header_up Connection {http.request.header.Connection}
+            }
+        }
+
+        # API endpoints
+        handle_path /api/* {
+            reverse_proxy localhost:5380 {
+                import standard_proxy
+            }
+        }
+
+        # Main web UI
+        reverse_proxy localhost:5380 {
+            import standard_proxy
+        }
+    }
+
+    # Deny all other IPs
+    respond 403 {
+        body "Access Denied: DNS Intelligence Hub requires VPN connection"
+        close
+    }
+}
+
+# WireGuard Management UI
+vpn.{$DOMAIN:localhost} {
+    import security_headers
+    import rate_limit_strict
+    import compression
+    import access_log vpn
+
+    # TEMPEST Level C: Maximum security headers
+    header {
+        X-Frame-Options DENY
+        X-Robots-Tag "noindex, nofollow, noarchive"
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';"
+    }
+
+    # IP whitelist - Only allow access from WireGuard subnet and local
+    @allowed {
+        remote_ip 10.10.0.0/24 127.0.0.1 172.24.0.0/24
+    }
+
+    handle @allowed {
+        reverse_proxy wg-ui:5000 {
+            import standard_proxy
+        }
+    }
+
+    # Deny all other IPs
+    respond 403 {
+        body "Access Denied: VPN Management requires VPN connection"
+        close
+    }
+}
+
+# DNS-over-HTTPS Endpoint (Optional)
+doh.{$DOMAIN:localhost} {
+    import security_headers
+    import rate_limit_api
+    import access_log doh
+
+    # DoH-specific headers
+    header {
+        X-Robots-Tag "noindex, nofollow"
+        Content-Security-Policy "default-src 'none';"
+    }
+
+    # IP whitelist - Only allow from WireGuard subnet (optional: remove for public DoH)
+    @allowed {
+        remote_ip 10.10.0.0/24 127.0.0.1 172.24.0.0/24
+    }
+
+    handle @allowed {
+        # DNS-over-HTTPS (RFC 8484)
+        handle_path /dns-query {
+            reverse_proxy localhost:5380 {
+                import standard_proxy
+                header_up Host {host}
+                header_up Accept application/dns-message
+            }
+        }
+
+        # Alternative DoH endpoint
+        handle_path /resolve {
+            reverse_proxy localhost:5380 {
+                import standard_proxy
+            }
+        }
+
+        respond 404
+    }
+
+    # Deny all other IPs (remove if you want public DoH)
+    respond 403 {
+        body "Access Denied: DoH requires VPN connection"
+        close
     }
 }
 

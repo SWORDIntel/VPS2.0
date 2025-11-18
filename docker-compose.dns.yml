@@ -1,0 +1,256 @@
+version: '3.9'
+
+# VPS2.0 - DNS Intelligence Hub
+# Deploy with: docker-compose -f docker-compose.yml -f docker-compose.dns.yml up -d
+
+#==============================================
+# Common Configurations
+#==============================================
+
+x-common-variables: &common-variables
+  TZ: UTC
+  PUID: 1000
+  PGID: 1000
+
+x-security-common: &security-common
+  security_opt:
+    - no-new-privileges:true
+    - apparmor:docker-default
+  cap_drop:
+    - ALL
+
+x-restart-policy: &restart-policy
+  restart: unless-stopped
+
+x-logging: &logging
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+      compress: "true"
+
+#==============================================
+# Networks
+#==============================================
+
+networks:
+  vpn:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.24.0.0/24
+          gateway: 172.24.0.1
+    driver_opts:
+      com.docker.network.bridge.name: br-vpn
+  frontend:
+    external: true
+  monitoring:
+    external: true
+
+#==============================================
+# Services
+#==============================================
+
+services:
+
+  #-------------------
+  # WireGuard VPN Server
+  #-------------------
+  wireguard:
+    image: linuxserver/wireguard:latest
+    container_name: wireguard
+    hostname: wireguard
+    <<: [*restart-policy, *logging]
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
+      - net.ipv4.ip_forward=1
+      - net.ipv6.conf.all.forwarding=1
+    environment:
+      <<: *common-variables
+      SERVERURL: ${WIREGUARD_SERVER_URL:?WireGuard server URL required}
+      SERVERPORT: ${WIREGUARD_PORT:-51820}
+      PEERS: ${WIREGUARD_PEERS:-1}
+      PEERDNS: 10.10.0.1
+      INTERNAL_SUBNET: 10.10.0.0/24
+      ALLOWEDIPS: ${WIREGUARD_ALLOWED_IPS:-10.10.0.0/24}
+      LOG_CONFS: ${WIREGUARD_LOG_CONFS:-true}
+    volumes:
+      - wireguard_config:/config
+      - /lib/modules:/lib/modules:ro
+    ports:
+      - "${WIREGUARD_PORT:-51820}:51820/udp"
+    networks:
+      vpn:
+        ipv4_address: 172.24.0.10
+      frontend:
+    healthcheck:
+      test: ["CMD", "test", "-f", "/config/server/publickey"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+        reservations:
+          memory: 128M
+
+  #-------------------
+  # Technitium DNS Server
+  #-------------------
+  technitium:
+    image: technitium/dns-server:latest
+    container_name: technitium
+    hostname: technitium
+    <<: [*restart-policy, *logging]
+    network_mode: host
+    cap_add:
+      - NET_BIND_SERVICE
+      - NET_RAW
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      <<: *common-variables
+      DNS_SERVER_DOMAIN: ${DOMAIN:-localhost}
+      DNS_SERVER_ADMIN_PASSWORD: ${TECHNITIUM_ADMIN_PASSWORD:?Technitium admin password required}
+      DNS_SERVER_ADMIN_PASSWORD_FILE: /run/secrets/technitium_admin_password
+      DNS_SERVER_PREFER_IPV6: "false"
+      DNS_SERVER_OPTIONAL_PROTOCOL_DNS_OVER_HTTP: "true"
+      DNS_SERVER_RECURSION: ALLOW_ONLY_FOR_PRIVATE_NETWORKS
+      DNS_SERVER_RECURSION_DENIED_NETWORKS: ""
+      DNS_SERVER_RECURSION_ALLOWED_NETWORKS: "10.10.0.0/24,127.0.0.1"
+      DNS_SERVER_ENABLE_BLOCKING: "true"
+      DNS_SERVER_ALLOW_TXT_BLOCKING_REPORT: "true"
+      DNS_SERVER_BLOCK_LIST_URLS: ${TECHNITIUM_BLOCKLISTS:-}
+      DNS_SERVER_FORWARDERS: ${TECHNITIUM_FORWARDERS:-1.1.1.1,1.0.0.1,8.8.8.8,8.8.4.4}
+      DNS_SERVER_LOG_QUERIES_TO_LOG_FILE: "true"
+      DNS_SERVER_USE_LOCAL_TIME: "true"
+      DNS_SERVER_LOG_FOLDER: /etc/dns/logs
+    volumes:
+      - technitium_config:/etc/dns
+      - technitium_logs:/etc/dns/logs
+      - technitium_blocklists:/etc/dns/blocklists
+    # Note: Using host networking, so ports are directly bound to host
+    # Port 53 (DNS) - UDP/TCP
+    # Port 5380 (Web UI) - TCP
+    # Port 853 (DNS-over-TLS) - TCP
+    # Port 443 (DNS-over-HTTPS via Caddy reverse proxy) - TCP
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:5380/ || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+
+  #-------------------
+  # DNS Query Log Exporter (for monitoring)
+  #-------------------
+  dns-exporter:
+    image: prom/blackbox-exporter:latest
+    container_name: dns-exporter
+    hostname: dns-exporter
+    <<: [*restart-policy, *logging]
+    <<: *security-common
+    command:
+      - '--config.file=/config/blackbox.yml'
+    volumes:
+      - ./dns/blackbox-exporter.yml:/config/blackbox.yml:ro
+    networks:
+      - vpn
+      - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9115/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+  #-------------------
+  # WireGuard UI (Optional Management Interface)
+  #-------------------
+  wg-ui:
+    image: ngoduykhanh/wireguard-ui:latest
+    container_name: wg-ui
+    hostname: wg-ui
+    <<: [*restart-policy, *logging]
+    <<: *security-common
+    cap_add:
+      - NET_ADMIN
+    environment:
+      <<: *common-variables
+      SESSION_SECRET: ${WIREGUARD_UI_SESSION_SECRET:-}
+      WGUI_USERNAME: ${WIREGUARD_UI_USERNAME:-admin}
+      WGUI_PASSWORD: ${WIREGUARD_UI_PASSWORD:-}
+      WGUI_PASSWORD_HASH: ${WIREGUARD_UI_PASSWORD_HASH:-}
+      WGUI_ENDPOINT_ADDRESS: ${WIREGUARD_SERVER_URL}
+      WGUI_ENDPOINT_PORT: ${WIREGUARD_PORT:-51820}
+      WGUI_DNS: 10.10.0.1
+      WGUI_MTU: "1420"
+      WGUI_PERSISTENT_KEEPALIVE: "25"
+      WGUI_FORWARD_MARK: "0xca6c"
+      WGUI_CONFIG_FILE_PATH: /etc/wireguard/wg0.conf
+    volumes:
+      - wireguard_config:/etc/wireguard
+      - wg_ui_db:/app/db
+    networks:
+      - vpn
+      - frontend
+    depends_on:
+      - wireguard
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+#==============================================
+# Volumes
+#==============================================
+
+volumes:
+  wireguard_config:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/wireguard/config
+  technitium_config:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/dns/config
+  technitium_logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/dns/logs
+  technitium_blocklists:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/dns/blocklists
+  wg_ui_db:

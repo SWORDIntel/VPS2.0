@@ -342,6 +342,82 @@ setup_services() {
     fi
 
     echo ""
+    if prompt_yes_no "Deploy DNS Intelligence Hub (WireGuard + Technitium)?" "n"; then
+        DEPLOY_DNS_INTELLIGENCE=true
+
+        echo ""
+        log_info "DNS Intelligence Hub Configuration:"
+        log_info "Private DNS resolver accessible only via VPN"
+        log_info "- WireGuard VPN for encrypted DNS tunnel"
+        log_info "- Technitium DNS with logging & filtering"
+        log_info "- Firewall protection (DNS not publicly exposed)"
+        log_info "- Client management tools included"
+        echo ""
+
+        # VPN Configuration
+        prompt_input "WireGuard server URL/IP" "$(curl -s ifconfig.me 2>/dev/null || echo '0.0.0.0')" WIREGUARD_SERVER_URL
+        prompt_input "WireGuard port" "51820" WIREGUARD_PORT
+        prompt_input "VPN subnet" "10.10.0.0/24" VPN_SUBNET
+
+        echo ""
+        log_info "DNS Server Configuration:"
+
+        # DNS Forwarders
+        echo ""
+        echo "Select upstream DNS forwarders:"
+        echo "  1) Cloudflare (1.1.1.1) - Privacy-focused"
+        echo "  2) Google (8.8.8.8) - Fast, data collection"
+        echo "  3) Quad9 (9.9.9.9) - Malware filtering"
+        echo "  4) Custom"
+        read -rp "Choice [1]: " forwarder_choice
+
+        case "${forwarder_choice:-1}" in
+            1) TECHNITIUM_FORWARDERS="1.1.1.1,1.0.0.1" ;;
+            2) TECHNITIUM_FORWARDERS="8.8.8.8,8.8.4.4" ;;
+            3) TECHNITIUM_FORWARDERS="9.9.9.9,149.112.112.112" ;;
+            4) prompt_input "Comma-separated DNS servers" "1.1.1.1,8.8.8.8" TECHNITIUM_FORWARDERS ;;
+            *) TECHNITIUM_FORWARDERS="1.1.1.1,1.0.0.1" ;;
+        esac
+
+        echo ""
+        if prompt_yes_no "Enable DNS blocklists (malware/ads/tracking)?" "y"; then
+            log_info "Adding recommended blocklists..."
+            TECHNITIUM_BLOCKLISTS="https://malware-filter.gitlab.io/malware-filter/urlhaus-filter-agh.txt;https://v.firebog.net/hosts/Easyprivacy.txt;https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt"
+        fi
+
+        echo ""
+        if prompt_yes_no "Enable DNS-over-HTTPS endpoint?" "n"; then
+            DNS_ENABLE_DOH=true
+            if prompt_yes_no "Make DoH endpoint public (vs VPN-only)?" "n"; then
+                DNS_DOH_PUBLIC=true
+            else
+                DNS_DOH_PUBLIC=false
+            fi
+        fi
+
+        echo ""
+        if prompt_yes_no "Configure firewall automatically?" "y"; then
+            DNS_FIREWALL_AUTO_CONFIGURE=true
+            log_success "Firewall will be configured to restrict DNS to VPN subnet"
+        else
+            DNS_FIREWALL_AUTO_CONFIGURE=false
+            log_warn "You must configure firewall manually"
+        fi
+
+        echo ""
+        if prompt_yes_no "Generate first VPN client config now?" "y"; then
+            prompt_input "Client name (e.g., laptop-alice)" "client-1" FIRST_CLIENT_NAME
+            DNS_GENERATE_FIRST_CLIENT=true
+        else
+            DNS_GENERATE_FIRST_CLIENT=false
+        fi
+
+        log_success "DNS Intelligence Hub will be deployed"
+    else
+        DEPLOY_DNS_INTELLIGENCE=false
+    fi
+
+    echo ""
     if prompt_yes_no "Deploy blockchain explorers?" "n"; then
         DEPLOY_BLOCKCHAIN=true
 
