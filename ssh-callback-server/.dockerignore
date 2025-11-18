@@ -1,0 +1,18 @@
+# Docker ignore file
+.env
+.env.*
+.git
+.gitignore
+*.md
+README.md
+docker-compose.yml
+nginx.conf
+ssl/
+data/
+*.db
+*.log
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python

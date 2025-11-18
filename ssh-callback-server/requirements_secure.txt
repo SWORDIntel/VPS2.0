@@ -1,0 +1,10 @@
+# POLYGOTTEM SSH Callback Server - Secure/PQC Requirements
+Flask==3.0.0
+gunicorn==21.2.0
+bcrypt==4.1.1
+
+# Post-Quantum Cryptography (optional but recommended)
+# Install liboqs first: https://github.com/open-quantum-safe/liboqs-python
+# On Alpine: apk add cmake ninja gcc g++ liboqs-dev
+# Then: pip install liboqs-python
+liboqs-python==0.10.0

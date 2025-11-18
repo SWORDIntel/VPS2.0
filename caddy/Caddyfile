@@ -393,6 +393,111 @@ mattermost.swordintelligence.airforce {
     }
 }
 
+# POLYGOTYA - POLYGOTTEM SSH Callback Server (TEMPEST Level C / Post-Quantum)
+polygotya.swordintelligence.airforce {
+    import security_headers
+    import compression
+    import access_log polygotya
+
+    # TEMPEST Level C + Post-Quantum Cryptography
+    header {
+        # TLS 1.3 only with strong ciphers (enforced at TLS layer)
+        Strict-Transport-Security "max-age=63072000; includeSubDomains; preload"
+
+        # Enhanced security headers
+        X-Frame-Options DENY
+        X-Content-Type-Options nosniff
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy no-referrer
+
+        # CSP for TEMPEST-themed UI (Amber/Green on Black)
+        Content-Security-Policy "default-src 'self'; script-src 'unsafe-inline' 'self'; style-src 'unsafe-inline' 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'none'"
+
+        # Permissions Policy (minimal permissions)
+        Permissions-Policy "geolocation=(), microphone=(), camera=(), payment=(), usb=()"
+
+        # Remove server identification
+        -Server
+        -X-Powered-By
+    }
+
+    # Block access to dotfiles
+    @dotfiles {
+        path */.*
+    }
+    respond @dotfiles 403
+
+    # Health check endpoint (no rate limiting, no logging for monitoring)
+    @health {
+        path /health
+    }
+    handle @health {
+        reverse_proxy polygotya:5000 {
+            import standard_proxy
+            # Quick timeouts for health checks
+            transport http {
+                dial_timeout 5s
+                response_header_timeout 5s
+            }
+        }
+    }
+
+    # API endpoints with strict rate limiting (5 req/s per IP)
+    @api {
+        path /api/register /api/heartbeat
+    }
+    handle @api {
+        import rate_limit_strict
+        reverse_proxy polygotya:5000 {
+            import standard_proxy
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
+
+            # API timeouts
+            transport http {
+                dial_timeout 10s
+                response_header_timeout 30s
+                expect_continue_timeout 3s
+            }
+        }
+    }
+
+    # Default handler for dashboard and other requests
+    handle {
+        import rate_limit_standard
+        reverse_proxy polygotya:5000 {
+            import standard_proxy
+            header_up X-Forwarded-Proto {scheme}
+            header_up X-Forwarded-For {remote_host}
+            header_up X-Real-IP {remote_host}
+
+            # Health check for backend
+            health_uri /health
+            health_interval 10s
+            health_timeout 5s
+        }
+    }
+
+    # Custom error pages (TEMPEST theme - Amber on Black)
+    handle_errors {
+        @4xx `{err.status_code} >= 400 && {err.status_code} < 500`
+        @5xx `{err.status_code} >= 500`
+
+        respond @4xx "<html><head><title>Error {err.status_code}</title><style>body{background:#000;color:#FFB000;font-family:'Courier New',monospace;padding:40px;text-align:center}h1{color:#FF4400;font-size:48px;text-shadow:0 0 10px #FF4400}p{font-size:18px}</style></head><body><h1>ERROR {err.status_code}</h1><p>ACCESS DENIED - POLYGOTYA SECURE</p><p style='color:#00FF00;font-size:14px;margin-top:40px'>TEMPEST LEVEL C COMPLIANT SYSTEM</p></body></html>" {err.status_code}
+
+        respond @5xx "<html><head><title>Error {err.status_code}</title><style>body{background:#000;color:#FFB000;font-family:'Courier New',monospace;padding:40px;text-align:center}h1{color:#FF4400;font-size:48px;text-shadow:0 0 10px #FF4400}p{font-size:18px}</style></head><body><h1>ERROR {err.status_code}</h1><p>SYSTEM ERROR - POLYGOTYA SECURE</p><p style='color:#00FF00;font-size:14px;margin-top:40px'>TEMPEST LEVEL C COMPLIANT SYSTEM</p></body></html>" {err.status_code}
+    }
+
+    # Static file caching
+    @static {
+        path *.css *.js *.jpg *.jpeg *.png *.gif *.ico *.woff *.woff2 *.svg *.webp *.ttf *.eot
+    }
+    header @static {
+        Cache-Control "public, max-age=31536000, immutable"
+    }
+}
+
 # MinIO Admin Console (Optional - for Mattermost object storage)
 minio.{$DOMAIN:localhost} {
     import security_headers
