@@ -75,6 +75,7 @@ sudo ./scripts/harden.sh
 **📚 Deployment Guides:**
 - **[Quick Start Guide](./QUICKSTART.md)** - 5-minute deployment walkthrough
 - **[Deployment Checklist](./docs/DEPLOYMENT-CHECKLIST.md)** - Complete step-by-step checklist
+- **[Printable Checklist](./docs/DEPLOYMENT-CHECKLIST-PRINT.html)** - Black & white print-optimized version
 - **[Verification Script](./scripts/verify-deployment.sh)** - Post-deployment health checks
 
 ---

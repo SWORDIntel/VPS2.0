@@ -1,0 +1,640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VPS2.0 Deployment Checklist - Printable Version</title>
+    <style>
+        /* Print-optimized CSS - Black & White Only */
+        @media print {
+            @page {
+                size: letter; /* or A4 */
+                margin: 0.75in 0.5in 0.75in 1in; /* top right bottom left - extra left margin for binding */
+            }
+
+            body {
+                font-family: 'Times New Roman', Times, serif;
+                font-size: 10pt;
+                line-height: 1.4;
+                color: #000 !important;
+                background: #fff !important;
+            }
+
+            /* Force black and white - no backgrounds, no colors */
+            * {
+                color: #000 !important;
+                background: #fff !important;
+                background-color: #fff !important;
+            }
+
+            /* Borders stay black */
+            .checkbox, code, .code-block, .signature-line, .notes-area, h1, h2 {
+                border-color: #000 !important;
+            }
+
+            /* Force page breaks */
+            .page-break {
+                page-break-before: always;
+            }
+
+            .page-break-after {
+                page-break-after: always;
+            }
+
+            /* Avoid breaks inside sections */
+            h2, h3 {
+                page-break-after: avoid;
+            }
+
+            .checklist-item {
+                page-break-inside: avoid;
+            }
+
+            /* No page breaks before headers */
+            h1, h2, h3 {
+                page-break-before: auto;
+            }
+
+            /* Header and footer */
+            @page {
+                @top-center {
+                    content: "VPS2.0 Deployment Checklist";
+                    font-size: 9pt;
+                    font-style: italic;
+                }
+                @bottom-right {
+                    content: "Page " counter(page) " of " counter(pages);
+                    font-size: 9pt;
+                }
+            }
+
+            /* Hide screen-only elements */
+            .no-print {
+                display: none !important;
+            }
+        }
+
+        /* Screen and print styles */
+        body {
+            font-family: 'Times New Roman', Times, serif;
+            font-size: 10pt;
+            line-height: 1.4;
+            max-width: 8.5in;
+            margin: 0 auto;
+            padding: 0.5in;
+            background: #fff;
+            color: #000;
+        }
+
+        h1 {
+            font-size: 18pt;
+            font-weight: bold;
+            text-align: center;
+            margin-bottom: 0.25in;
+            border-bottom: 2pt solid #000;
+            padding-bottom: 0.1in;
+        }
+
+        h2 {
+            font-size: 14pt;
+            font-weight: bold;
+            margin-top: 0.3in;
+            margin-bottom: 0.15in;
+            border-bottom: 1pt solid #000;
+        }
+
+        h3 {
+            font-size: 12pt;
+            font-weight: bold;
+            margin-top: 0.2in;
+            margin-bottom: 0.1in;
+        }
+
+        .subtitle {
+            text-align: center;
+            font-size: 11pt;
+            margin-bottom: 0.2in;
+            font-style: italic;
+        }
+
+        .checklist-item {
+            margin-left: 0.25in;
+            margin-bottom: 0.08in;
+            position: relative;
+        }
+
+        .checkbox {
+            display: inline-block;
+            width: 0.15in;
+            height: 0.15in;
+            border: 1pt solid #000;
+            margin-right: 0.1in;
+            vertical-align: middle;
+            background: #fff;
+        }
+
+        .nested-item {
+            margin-left: 0.3in;
+        }
+
+        code {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 9pt;
+            background: #fff;
+            padding: 0.02in 0.05in;
+            border: 0.5pt solid #000;
+        }
+
+        .code-block {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 8pt;
+            background: #fff;
+            padding: 0.1in;
+            border: 0.5pt solid #000;
+            margin: 0.1in 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .signature-line {
+            border-bottom: 1pt solid #000;
+            display: inline-block;
+            min-width: 2in;
+            margin: 0 0.1in;
+        }
+
+        .notes-area {
+            border: 1pt solid #000;
+            min-height: 0.5in;
+            padding: 0.1in;
+            margin: 0.1in 0;
+        }
+
+        .meta-info {
+            font-size: 9pt;
+            text-align: center;
+            margin-top: 0.2in;
+            padding-top: 0.1in;
+            border-top: 1pt solid #000;
+        }
+
+        .no-print {
+            background: #ffffcc;
+            padding: 0.2in;
+            border: 2pt dashed #cc9900;
+            margin-bottom: 0.3in;
+            text-align: center;
+        }
+
+        .no-print button {
+            background: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+            font-size: 14pt;
+            margin: 5px;
+        }
+
+        .no-print button:hover {
+            background: #45a049;
+        }
+    </style>
+</head>
+<body>
+
+<div class="no-print">
+    <h2>Print Instructions</h2>
+    <p><strong>Click Print button below or use Ctrl+P (Cmd+P on Mac)</strong></p>
+    <p>For best results, use these settings:</p>
+    <ul style="text-align: left; display: inline-block;">
+        <li>Paper: Letter or A4</li>
+        <li>Margins: Default (extra left margin for 3-hole punch)</li>
+        <li>Print backgrounds: Off (recommended for B&W printing)</li>
+        <li>Scale: 100% (or fit to page)</li>
+    </ul>
+    <br><br>
+    <button onclick="window.print()">🖨️ Print Checklist</button>
+</div>
+
+<h1>VPS2.0 Deployment Checklist</h1>
+<div class="subtitle">Complete step-by-step checklist for VPS2.0 deployment</div>
+<div class="subtitle">SWORD Intelligence Platform</div>
+
+<h2>Pre-Deployment Phase</h2>
+
+<h3>Server Preparation</h3>
+<div class="checklist-item"><span class="checkbox"></span> VPS provisioned with minimum 16GB RAM, 100GB SSD</div>
+<div class="checklist-item"><span class="checkbox"></span> Debian 11/12 or Ubuntu 22.04 LTS installed</div>
+<div class="checklist-item"><span class="checkbox"></span> Server accessible via SSH (port 22)</div>
+<div class="checklist-item"><span class="checkbox"></span> Root or sudo access confirmed</div>
+<div class="checklist-item"><span class="checkbox"></span> Server IP address documented: <span class="signature-line"></span></div>
+<div class="checklist-item"><span class="checkbox"></span> Domain name acquired: <span class="signature-line"></span></div>
+
+<h3>DNS Configuration</h3>
+<div class="checklist-item"><span class="checkbox"></span> Created A record: <code>*.swordintelligence.airforce</code> → Server IP</div>
+<div class="checklist-item"><span class="checkbox"></span> OR created specific subdomain A records:</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> <code>mattermost.swordintelligence.airforce</code></div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> <code>polygotya.swordintelligence.airforce</code></div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> <code>grafana.swordintelligence.airforce</code></div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> <code>portainer.swordintelligence.airforce</code></div>
+<div class="checklist-item"><span class="checkbox"></span> DNS propagation verified (nslookup/dig)</div>
+
+<h3>Software Prerequisites</h3>
+<div class="checklist-item"><span class="checkbox"></span> Docker installed (20.10+)</div>
+<div class="code-block">curl -fsSL https://get.docker.com | sh</div>
+<div class="checklist-item"><span class="checkbox"></span> Docker Compose installed (2.0+)</div>
+<div class="checklist-item"><span class="checkbox"></span> User added to docker group</div>
+<div class="code-block">sudo usermod -aG docker $USER
+newgrp docker</div>
+<div class="checklist-item"><span class="checkbox"></span> Verified Docker works without sudo</div>
+<div class="code-block">docker ps</div>
+
+<div class="page-break"></div>
+
+<h2>Deployment Phase</h2>
+
+<h3>Step 1: Repository Setup</h3>
+<div class="checklist-item"><span class="checkbox"></span> Cloned VPS2.0 repository</div>
+<div class="code-block">cd /home/user
+git clone https://github.com/SWORDIntel/VPS2.0.git
+cd VPS2.0</div>
+<div class="checklist-item"><span class="checkbox"></span> Repository at correct path: <code>/home/user/VPS2.0</code></div>
+<div class="checklist-item"><span class="checkbox"></span> Branch checked out: <code>main</code> or <span class="signature-line"></span></div>
+
+<h3>Step 2: Environment Configuration</h3>
+<div class="checklist-item"><span class="checkbox"></span> Copied <code>.env.template</code> to <code>.env</code></div>
+<div class="code-block">cp .env.template .env</div>
+<div class="checklist-item"><span class="checkbox"></span> Set <code>DOMAIN=swordintelligence.airforce</code></div>
+<div class="checklist-item"><span class="checkbox"></span> Generated and set secure passwords for:</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> <code>POSTGRES_PASSWORD</code> (openssl rand -base64 32)</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> <code>REDIS_PASSWORD</code> (openssl rand -base64 32)</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> <code>GRAFANA_ADMIN_PASSWORD</code> (openssl rand -base64 32)</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> <code>MATTERMOST_DB_PASSWORD</code> (openssl rand -base64 32)</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> <code>MATTERMOST_REDIS_PASSWORD</code> (openssl rand -base64 32)</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> <code>MATTERMOST_MINIO_ACCESS_KEY</code> (openssl rand -base64 32)</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> <code>MATTERMOST_MINIO_SECRET_KEY</code> (openssl rand -base64 32)</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> <code>POLYGOTYA_API_KEY</code> (openssl rand -base64 32)</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> <code>POLYGOTYA_SECRET_KEY</code> (openssl rand -hex 32)</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> <code>POLYGOTYA_ADMIN_PASSWORD</code> (openssl rand -base64 24)</div>
+<div class="checklist-item"><span class="checkbox"></span> Enabled desired services:</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> <code>DEPLOY_DNS_HUB=true</code> (if using DNS Hub)</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> <code>DEPLOY_MATTERMOST=true</code></div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> <code>DEPLOY_POLYGOTYA=true</code></div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> <code>DEPLOY_GRAFANA=true</code></div>
+<div class="checklist-item"><span class="checkbox"></span> Verified NO <code>CHANGE_ME</code> values remain</div>
+<div class="code-block">grep "CHANGE_ME" .env</div>
+<div class="checklist-item"><span class="checkbox"></span> Saved <code>.env</code> file securely (backup to password manager)</div>
+
+<h3>Step 3: Initial Deployment</h3>
+<div class="checklist-item"><span class="checkbox"></span> Made deployment script executable</div>
+<div class="code-block">chmod +x scripts/deploy.sh</div>
+<div class="checklist-item"><span class="checkbox"></span> Ran deployment script</div>
+<div class="code-block">sudo ./scripts/deploy.sh</div>
+<div class="checklist-item"><span class="checkbox"></span> Monitored deployment progress (10-15 minutes)</div>
+<div class="checklist-item"><span class="checkbox"></span> Saved <code>credentials.txt</code> to password manager</div>
+<div class="checklist-item"><span class="checkbox"></span> <strong>DELETED <code>credentials.txt</code> from server</strong></div>
+<div class="code-block">rm credentials.txt</div>
+
+<h3>Step 4: Verify Deployment</h3>
+<div class="checklist-item"><span class="checkbox"></span> Ran verification script</div>
+<div class="code-block">./scripts/verify-deployment.sh</div>
+<div class="checklist-item"><span class="checkbox"></span> All core services running:</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Caddy</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> PostgreSQL</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Redis</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Grafana</div>
+<div class="checklist-item"><span class="checkbox"></span> Mattermost services running (if deployed):</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Mattermost</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Mattermost-DB</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Mattermost-Redis</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Mattermost-MinIO</div>
+<div class="checklist-item"><span class="checkbox"></span> POLYGOTYA running (if deployed)</div>
+<div class="checklist-item"><span class="checkbox"></span> No unhealthy containers</div>
+<div class="code-block">docker ps</div>
+
+<div class="page-break"></div>
+
+<h2>Post-Deployment Phase</h2>
+
+<h3>Firewall Configuration</h3>
+<div class="checklist-item"><span class="checkbox"></span> UFW installed and enabled</div>
+<div class="checklist-item"><span class="checkbox"></span> Port 22 (SSH) allowed and verified</div>
+<div class="code-block">sudo ufw status | grep 22</div>
+<div class="checklist-item"><span class="checkbox"></span> Port 80 (HTTP) allowed</div>
+<div class="checklist-item"><span class="checkbox"></span> Port 443 (HTTPS) allowed</div>
+<div class="checklist-item"><span class="checkbox"></span> Firewall enabled</div>
+<div class="code-block">sudo ufw enable</div>
+<div class="checklist-item"><span class="checkbox"></span> <strong>Verified SSH still works before closing session</strong></div>
+
+<h3>SSL/TLS Verification</h3>
+<div class="checklist-item"><span class="checkbox"></span> Accessed services via HTTPS (not HTTP)</div>
+<div class="checklist-item"><span class="checkbox"></span> Caddy obtained Let's Encrypt certificates automatically</div>
+<div class="checklist-item"><span class="checkbox"></span> No browser SSL warnings</div>
+<div class="checklist-item"><span class="checkbox"></span> Verified TLS 1.3 in use</div>
+<div class="code-block">curl -vI https://mattermost.swordintelligence.airforce 2>&1 | grep "TLSv1.3"</div>
+
+<h3>Mattermost Setup</h3>
+<div class="checklist-item"><span class="checkbox"></span> Accessed: <code>https://mattermost.swordintelligence.airforce</code></div>
+<div class="checklist-item"><span class="checkbox"></span> Created first admin account</div>
+<div class="checklist-item nested-item">Username: <span class="signature-line"></span></div>
+<div class="checklist-item nested-item">Email: <code>intel@swordintelligence.airforce</code></div>
+<div class="checklist-item"><span class="checkbox"></span> Ran initial security setup</div>
+<div class="code-block">./scripts/mattermost/initial-setup.sh</div>
+<div class="checklist-item"><span class="checkbox"></span> Configured SMTP email settings (System Console → Email)</div>
+<div class="checklist-item nested-item">SMTP Server: <span class="signature-line"></span></div>
+<div class="checklist-item nested-item">SMTP Port: <code>587</code> or <span class="signature-line"></span></div>
+<div class="checklist-item nested-item">Username: <code>intel@swordintelligence.airforce</code></div>
+<div class="checklist-item nested-item">Password: (from password manager)</div>
+<div class="checklist-item"><span class="checkbox"></span> Enabled MFA in System Console</div>
+<div class="checklist-item"><span class="checkbox"></span> Disabled open user registration</div>
+<div class="checklist-item"><span class="checkbox"></span> Installed plugins</div>
+<div class="code-block">./scripts/mattermost/install-plugins.sh</div>
+<div class="checklist-item"><span class="checkbox"></span> Verified plugins installed:</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Playbooks</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Boards (Focalboard)</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> GitLab</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Jira</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Remind</div>
+<div class="checklist-item"><span class="checkbox"></span> Imported board templates:</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> CVE Vulnerability Tracker</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Threat Intelligence Database</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Investigation Case Tracker</div>
+<div class="checklist-item"><span class="checkbox"></span> Created incident response playbooks from templates</div>
+
+<h3>POLYGOTYA Setup</h3>
+<div class="checklist-item"><span class="checkbox"></span> Retrieved admin password</div>
+<div class="code-block">docker logs polygotya | grep "DEFAULT ADMIN"</div>
+<div class="checklist-item"><span class="checkbox"></span> Accessed: <code>https://polygotya.swordintelligence.airforce</code></div>
+<div class="checklist-item"><span class="checkbox"></span> Logged in with admin account</div>
+<div class="checklist-item"><span class="checkbox"></span> <strong>Changed admin password immediately</strong></div>
+<div class="checklist-item"><span class="checkbox"></span> Verified health endpoint</div>
+<div class="code-block">curl https://polygotya.swordintelligence.airforce/health</div>
+<div class="checklist-item"><span class="checkbox"></span> Verified PQC enabled in health response</div>
+<div class="checklist-item"><span class="checkbox"></span> Tested encrypted callback (optional)</div>
+<div class="checklist-item"><span class="checkbox"></span> Saved API key from <code>.env</code> to password manager</div>
+<div class="code-block">grep POLYGOTYA_API_KEY .env</div>
+
+<h3>Grafana Setup</h3>
+<div class="checklist-item"><span class="checkbox"></span> Accessed: <code>https://grafana.swordintelligence.airforce</code></div>
+<div class="checklist-item"><span class="checkbox"></span> Logged in with default credentials (admin/admin)</div>
+<div class="checklist-item"><span class="checkbox"></span> <strong>Changed admin password</strong></div>
+<div class="checklist-item"><span class="checkbox"></span> Configured data sources:</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Prometheus</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Loki</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Victoria Metrics</div>
+<div class="checklist-item"><span class="checkbox"></span> Imported dashboards</div>
+<div class="checklist-item"><span class="checkbox"></span> Set up alert rules (optional)</div>
+<div class="checklist-item"><span class="checkbox"></span> Configured AlertManager → Mattermost webhook (optional)</div>
+
+<h3>DNS Hub Setup (if deployed)</h3>
+<div class="checklist-item"><span class="checkbox"></span> Accessed Technitium DNS: <code>http://SERVER_IP:5380</code></div>
+<div class="checklist-item"><span class="checkbox"></span> Changed default password (admin/admin)</div>
+<div class="checklist-item"><span class="checkbox"></span> Configured DNS zones</div>
+<div class="checklist-item"><span class="checkbox"></span> Set up WireGuard VPN</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Generated client configs</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Tested VPN connection</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Verified DNS queries through VPN</div>
+
+<div class="page-break"></div>
+
+<h2>Security Hardening Phase</h2>
+
+<h3>Password Security</h3>
+<div class="checklist-item"><span class="checkbox"></span> All default passwords changed</div>
+<div class="checklist-item"><span class="checkbox"></span> All passwords stored in password manager</div>
+<div class="checklist-item"><span class="checkbox"></span> Passwords meet complexity requirements:</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> 12+ characters</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Uppercase, lowercase, numbers, symbols</div>
+<div class="checklist-item"><span class="checkbox"></span> No passwords stored in plaintext on server</div>
+<div class="checklist-item"><span class="checkbox"></span> <code>.env</code> file permissions set to 600</div>
+<div class="code-block">chmod 600 .env</div>
+
+<h3>MFA Configuration</h3>
+<div class="checklist-item"><span class="checkbox"></span> MFA enabled for Mattermost admin account</div>
+<div class="checklist-item"><span class="checkbox"></span> MFA enforced for all Mattermost users (optional)</div>
+<div class="checklist-item"><span class="checkbox"></span> MFA tested and recovery codes saved</div>
+
+<h3>Network Security</h3>
+<div class="checklist-item"><span class="checkbox"></span> Firewall configured and tested</div>
+<div class="checklist-item"><span class="checkbox"></span> SSH key authentication enabled (optional but recommended)</div>
+<div class="checklist-item"><span class="checkbox"></span> SSH password authentication disabled (optional)</div>
+<div class="checklist-item"><span class="checkbox"></span> Fail2ban installed and configured (optional)</div>
+<div class="code-block">sudo apt install fail2ban</div>
+<div class="checklist-item"><span class="checkbox"></span> Rate limiting verified in Caddy logs</div>
+
+<h3>Audit Logging</h3>
+<div class="checklist-item"><span class="checkbox"></span> Mattermost audit logging enabled</div>
+<div class="checklist-item"><span class="checkbox"></span> POLYGOTYA audit logging verified</div>
+<div class="code-block">docker exec polygotya sqlite3 /data/ssh_callbacks_secure.db "SELECT COUNT(*) FROM audit_log;"</div>
+<div class="checklist-item"><span class="checkbox"></span> Docker logs configured (log rotation)</div>
+<div class="checklist-item"><span class="checkbox"></span> Centralized logging set up (optional)</div>
+
+<div class="page-break"></div>
+
+<h2>Backup & Recovery Phase</h2>
+
+<h3>Backup Configuration</h3>
+<div class="checklist-item"><span class="checkbox"></span> Backup directory created: <code>/srv/backups/</code></div>
+<div class="checklist-item"><span class="checkbox"></span> Backup script tested</div>
+<div class="code-block">./scripts/backup.sh</div>
+<div class="checklist-item"><span class="checkbox"></span> Backup includes:</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> PostgreSQL databases</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Mattermost data</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> POLYGOTYA database</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Configuration files (.env, docker-compose files)</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Caddy certificates</div>
+<div class="checklist-item"><span class="checkbox"></span> Automated backup cron job configured</div>
+<div class="code-block">0 2 * * * /home/user/VPS2.0/scripts/backup.sh</div>
+<div class="checklist-item"><span class="checkbox"></span> Backups compressed and encrypted</div>
+<div class="checklist-item"><span class="checkbox"></span> Off-site backup location configured (optional)</div>
+<div class="checklist-item"><span class="checkbox"></span> Backup retention policy set (keep 30 days)</div>
+
+<h3>Recovery Testing</h3>
+<div class="checklist-item"><span class="checkbox"></span> Documented recovery procedure</div>
+<div class="checklist-item"><span class="checkbox"></span> Tested database restore (in test environment if possible)</div>
+<div class="checklist-item"><span class="checkbox"></span> Verified backup integrity</div>
+<div class="checklist-item"><span class="checkbox"></span> Recovery time objective (RTO) documented</div>
+<div class="checklist-item"><span class="checkbox"></span> Recovery point objective (RPO) documented</div>
+
+<h2>Monitoring & Alerting Phase</h2>
+
+<h3>Health Monitoring</h3>
+<div class="checklist-item"><span class="checkbox"></span> Grafana dashboards configured</div>
+<div class="checklist-item"><span class="checkbox"></span> Container health checks enabled</div>
+<div class="checklist-item"><span class="checkbox"></span> Disk space monitoring configured (alert at 80%)</div>
+<div class="checklist-item"><span class="checkbox"></span> Memory usage monitoring configured</div>
+<div class="checklist-item"><span class="checkbox"></span> CPU usage monitoring configured</div>
+<div class="checklist-item"><span class="checkbox"></span> Service uptime monitoring configured</div>
+
+<h3>Alerting</h3>
+<div class="checklist-item"><span class="checkbox"></span> AlertManager configured</div>
+<div class="checklist-item"><span class="checkbox"></span> Mattermost #alerts channel created</div>
+<div class="checklist-item"><span class="checkbox"></span> Alert rules configured:</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Container down</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> High CPU usage (>80%)</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> High memory usage (>90%)</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Low disk space (<10GB)</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Failed login attempts</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Certificate expiration (30 days)</div>
+<div class="checklist-item"><span class="checkbox"></span> Test alert sent to Mattermost</div>
+<div class="checklist-item"><span class="checkbox"></span> On-call rotation configured (if applicable)</div>
+
+<div class="page-break"></div>
+
+<h2>Integration Phase</h2>
+
+<h3>GitLab Integration (if deployed)</h3>
+<div class="checklist-item"><span class="checkbox"></span> GitLab OAuth app created</div>
+<div class="checklist-item"><span class="checkbox"></span> Mattermost GitLab plugin configured</div>
+<div class="checklist-item"><span class="checkbox"></span> Test repository subscribed to Mattermost channel</div>
+<div class="checklist-item"><span class="checkbox"></span> Webhooks tested (issue creation, MR, pipeline)</div>
+
+<h3>Prometheus Integration</h3>
+<div class="checklist-item"><span class="checkbox"></span> AlertManager configured</div>
+<div class="checklist-item"><span class="checkbox"></span> Webhook created in Mattermost #alerts channel</div>
+<div class="checklist-item"><span class="checkbox"></span> Test alert sent successfully</div>
+<div class="checklist-item"><span class="checkbox"></span> Alert routing configured</div>
+
+<h3>Email Integration</h3>
+<div class="checklist-item"><span class="checkbox"></span> SMTP configured in Mattermost</div>
+<div class="checklist-item"><span class="checkbox"></span> Test email sent successfully</div>
+<div class="checklist-item"><span class="checkbox"></span> Email templates customized (optional)</div>
+<div class="checklist-item"><span class="checkbox"></span> Email notifications configured per user preference</div>
+
+<h2>Documentation Phase</h2>
+
+<h3>System Documentation</h3>
+<div class="checklist-item"><span class="checkbox"></span> Network topology documented</div>
+<div class="checklist-item"><span class="checkbox"></span> Service URLs documented</div>
+<div class="checklist-item"><span class="checkbox"></span> Admin credentials documented (in password manager only)</div>
+<div class="checklist-item"><span class="checkbox"></span> Firewall rules documented</div>
+<div class="checklist-item"><span class="checkbox"></span> Backup procedures documented</div>
+<div class="checklist-item"><span class="checkbox"></span> Recovery procedures documented</div>
+
+<h3>Operational Runbooks</h3>
+<div class="checklist-item"><span class="checkbox"></span> Incident response playbook created</div>
+<div class="checklist-item"><span class="checkbox"></span> Service restart procedures documented</div>
+<div class="checklist-item"><span class="checkbox"></span> Troubleshooting guide created</div>
+<div class="checklist-item"><span class="checkbox"></span> Escalation procedures defined</div>
+
+<h3>User Documentation</h3>
+<div class="checklist-item"><span class="checkbox"></span> Mattermost user guide created (optional)</div>
+<div class="checklist-item"><span class="checkbox"></span> Board templates documented</div>
+<div class="checklist-item"><span class="checkbox"></span> Playbook usage guide created</div>
+<div class="checklist-item"><span class="checkbox"></span> Training materials prepared (if needed)</div>
+
+<div class="page-break"></div>
+
+<h2>Production Readiness Phase</h2>
+
+<h3>Final Checks</h3>
+<div class="checklist-item"><span class="checkbox"></span> All services accessible from internet</div>
+<div class="checklist-item"><span class="checkbox"></span> SSL certificates valid and not expiring soon</div>
+<div class="checklist-item"><span class="checkbox"></span> No security vulnerabilities in deployed containers</div>
+<div class="code-block">docker scan caddy</div>
+<div class="checklist-item"><span class="checkbox"></span> No exposed secrets in logs or environment</div>
+<div class="checklist-item"><span class="checkbox"></span> All critical data encrypted at rest</div>
+<div class="checklist-item"><span class="checkbox"></span> All communications encrypted in transit (TLS 1.3)</div>
+<div class="checklist-item"><span class="checkbox"></span> Compliance requirements met (TEMPEST Level C for POLYGOTYA)</div>
+
+<h3>Performance Testing</h3>
+<div class="checklist-item"><span class="checkbox"></span> Load testing performed (optional)</div>
+<div class="checklist-item"><span class="checkbox"></span> Response times acceptable (<2s for web UI)</div>
+<div class="checklist-item"><span class="checkbox"></span> Database query performance acceptable</div>
+<div class="checklist-item"><span class="checkbox"></span> No memory leaks observed over 24 hours</div>
+<div class="checklist-item"><span class="checkbox"></span> No disk space leaks observed</div>
+
+<h3>Disaster Recovery</h3>
+<div class="checklist-item"><span class="checkbox"></span> Disaster recovery plan documented</div>
+<div class="checklist-item"><span class="checkbox"></span> Backup restore tested</div>
+<div class="checklist-item"><span class="checkbox"></span> Failover procedures documented (if applicable)</div>
+<div class="checklist-item"><span class="checkbox"></span> Business continuity plan created</div>
+<div class="checklist-item"><span class="checkbox"></span> RTO/RPO defined and communicated</div>
+
+<h2>Team Onboarding Phase</h2>
+
+<h3>User Accounts</h3>
+<div class="checklist-item"><span class="checkbox"></span> Mattermost accounts created for team members</div>
+<div class="checklist-item"><span class="checkbox"></span> Roles and permissions assigned</div>
+<div class="checklist-item"><span class="checkbox"></span> MFA enrollment confirmed for all users</div>
+<div class="checklist-item"><span class="checkbox"></span> User training scheduled</div>
+
+<h3>Workspace Setup</h3>
+<div class="checklist-item"><span class="checkbox"></span> Teams created in Mattermost</div>
+<div class="checklist-item"><span class="checkbox"></span> Channels created:</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> #general</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> #p0-incidents</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> #alerts</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> #playbook-runs</div>
+<div class="checklist-item"><span class="checkbox"></span> Board templates imported and configured</div>
+<div class="checklist-item"><span class="checkbox"></span> Playbooks created from templates:</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> P0 Incident Response</div>
+<div class="checklist-item nested-item"><span class="checkbox"></span> Security Patch Deployment</div>
+
+<h3>Integration Testing</h3>
+<div class="checklist-item"><span class="checkbox"></span> End-to-end incident response workflow tested</div>
+<div class="checklist-item"><span class="checkbox"></span> Board creation and updates tested</div>
+<div class="checklist-item"><span class="checkbox"></span> Playbook execution tested</div>
+<div class="checklist-item"><span class="checkbox"></span> Alert flow tested (Prometheus → Mattermost)</div>
+<div class="checklist-item"><span class="checkbox"></span> POLYGOTYA callback tested</div>
+
+<div class="page-break"></div>
+
+<h2>Sign-Off</h2>
+
+<h3>Deployment Lead</h3>
+<div class="checklist-item"><span class="checkbox"></span> Deployment completed successfully</div>
+<div class="checklist-item"><span class="checkbox"></span> All checklist items completed</div>
+<div class="checklist-item"><span class="checkbox"></span> System handed over to operations team</div>
+<div class="checklist-item"><span class="checkbox"></span> Post-deployment review scheduled</div>
+
+<p><strong>Name:</strong> <span class="signature-line"></span></p>
+<p><strong>Date:</strong> <span class="signature-line"></span></p>
+<p><strong>Signature:</strong> <span class="signature-line"></span></p>
+
+<h3>Operations Lead</h3>
+<div class="checklist-item"><span class="checkbox"></span> Handover received</div>
+<div class="checklist-item"><span class="checkbox"></span> System documentation reviewed</div>
+<div class="checklist-item"><span class="checkbox"></span> Access credentials verified</div>
+<div class="checklist-item"><span class="checkbox"></span> Monitoring and alerting verified</div>
+<div class="checklist-item"><span class="checkbox"></span> Backup and recovery procedures understood</div>
+
+<p><strong>Name:</strong> <span class="signature-line"></span></p>
+<p><strong>Date:</strong> <span class="signature-line"></span></p>
+<p><strong>Signature:</strong> <span class="signature-line"></span></p>
+
+<h2>Post-Deployment Notes</h2>
+
+<p><strong>Issues Encountered:</strong></p>
+<div class="notes-area" style="min-height: 1.5in;"></div>
+
+<p><strong>Deviations from Standard:</strong></p>
+<div class="notes-area" style="min-height: 1.5in;"></div>
+
+<p><strong>Recommendations:</strong></p>
+<div class="notes-area" style="min-height: 1.5in;"></div>
+
+<h3 style="margin-top: 0.3in;">Final Status</h3>
+<p>
+    <strong>Deployment Status:</strong>
+    <span class="checkbox"></span> Complete &nbsp;&nbsp;
+    <span class="checkbox"></span> Partial &nbsp;&nbsp;
+    <span class="checkbox"></span> Failed
+</p>
+<p>
+    <strong>Production Ready:</strong>
+    <span class="checkbox"></span> Yes &nbsp;&nbsp;
+    <span class="checkbox"></span> No &nbsp;&nbsp;
+    <span class="checkbox"></span> Pending
+</p>
+<p><strong>Sign-Off Date:</strong> <span class="signature-line"></span></p>
+
+<div class="meta-info">
+    <strong>Version:</strong> 2.0 &nbsp;|&nbsp;
+    <strong>Last Updated:</strong> 2025-11-18 &nbsp;|&nbsp;
+    <strong>Document Owner:</strong> SWORD Intelligence Operations Team
+</div>
+
+</body>
+</html>
