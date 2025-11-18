@@ -32,7 +32,26 @@ curl -fsSL https://raw.githubusercontent.com/SWORDIntel/VPS2.0/main/install.sh |
 - ✅ DNS verification and service deployment
 - ✅ Post-deployment health checks
 
-See [QUICK_START.md](./QUICK_START.md) for detailed options and troubleshooting.
+See [Quick Start Guide](./docs/QUICK_START.md) for detailed options and troubleshooting.
+
+### Local Setup (When Archive is Uploaded)
+
+If you've downloaded and extracted the VPS2.0 archive to your server:
+
+```bash
+# Extract the archive
+tar -xzf VPS2.0.tar.gz
+cd VPS2.0
+
+# Run local setup script
+sudo bash setup.sh
+```
+
+**Features:**
+- ✅ Validates Docker installation
+- ✅ Checks system requirements
+- ✅ Verifies repository structure
+- ✅ Launches interactive setup wizard
 
 ### Manual Installation (Advanced)
 
@@ -196,19 +215,27 @@ VPS2.0 is a comprehensive, production-grade software stack designed for intellig
 
 ## 📚 Documentation
 
-- **[Deployment Guide](./DEPLOYMENT_GUIDE.md)** - Complete deployment instructions
-- **[Stack Architecture](./STACK_ARCHITECTURE.md)** - Detailed architecture documentation
-- **[ARTICBASTION](./ARTICBASTION.MD)** - Secure gateway configuration
-- **[Improvements](./Improvements2.md)** - Enhancement roadmap
+**[📖 Complete Documentation Index](./docs/)** - Browse all documentation
+
+### Core Guides
+
+- **[Quick Start Guide](./docs/QUICK_START.md)** - One-liner installation and deployment options
+- **[Deployment Guide](./docs/DEPLOYMENT_GUIDE.md)** - Comprehensive deployment instructions
+- **[Stack Architecture](./docs/STACK_ARCHITECTURE.md)** - Technical architecture and service catalog
+- **[Dashboard Guide](./docs/DASHBOARD_GUIDE.md)** - TEMPEST Level C dashboard operations
+
+### Technical Documentation
+
+- **[Ease of Deployment](./docs/EASE_OF_DEPLOYMENT.md)** - Installer implementation details
+- **[Implementation Summary](./docs/SUMMARY.md)** - Project overview and status
 
 ### Quick Links
 
-- [Prerequisites](./DEPLOYMENT_GUIDE.md#prerequisites)
-- [Installation](./DEPLOYMENT_GUIDE.md#quick-start-deployment)
-- [Configuration](./DEPLOYMENT_GUIDE.md#post-deployment-configuration)
-- [Security Hardening](./DEPLOYMENT_GUIDE.md#security-hardening)
-- [Backup & Recovery](./DEPLOYMENT_GUIDE.md#backup-configuration)
-- [Troubleshooting](./DEPLOYMENT_GUIDE.md#troubleshooting)
+- [System Requirements](#-requirements)
+- [Installation Methods](#-quick-start)
+- [Service Catalog](#-services)
+- [Security Features](#-security)
+- [Troubleshooting](./docs/QUICK_START.md#troubleshooting)
 
 ---
 
@@ -472,8 +499,8 @@ S3_SECRET_KEY=your_secret
 
 ### Getting Help
 
-1. **Documentation**: Check [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) and [STACK_ARCHITECTURE.md](./STACK_ARCHITECTURE.md)
-2. **Troubleshooting**: See [Troubleshooting Guide](./DEPLOYMENT_GUIDE.md#troubleshooting)
+1. **Documentation**: Check [Deployment Guide](./docs/DEPLOYMENT_GUIDE.md) and [Stack Architecture](./docs/STACK_ARCHITECTURE.md)
+2. **Troubleshooting**: See [Quick Start Guide](./docs/QUICK_START.md#troubleshooting)
 3. **Issues**: Open an issue on [GitHub](https://github.com/SWORDIntel/VPS2.0/issues)
 4. **Security**: Report security issues to security@swordintel.com
 

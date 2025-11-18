@@ -805,9 +805,9 @@ EOF
     echo ""
 
     echo -e "${CYAN}${INFO} Documentation:${NC}"
-    echo -e "  Deployment Guide: ${PROJECT_ROOT}/DEPLOYMENT_GUIDE.md"
-    echo -e "  Dashboard Guide:  ${PROJECT_ROOT}/DASHBOARD_GUIDE.md"
-    echo -e "  Architecture:     ${PROJECT_ROOT}/STACK_ARCHITECTURE.md"
+    echo -e "  Deployment Guide: ${PROJECT_ROOT}/docs/DEPLOYMENT_GUIDE.md"
+    echo -e "  Dashboard Guide:  ${PROJECT_ROOT}/docs/DASHBOARD_GUIDE.md"
+    echo -e "  Architecture:     ${PROJECT_ROOT}/docs/STACK_ARCHITECTURE.md"
     echo ""
 
     echo -e "${GREEN}${CHECK} Status: All systems operational${NC}"
