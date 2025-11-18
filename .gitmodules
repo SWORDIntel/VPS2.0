@@ -7,3 +7,6 @@
 [submodule "external/ARTICBASTION"]
 	path = external/ARTICBASTION
 	url = https://github.com/SWORDIntel/ARTICBASTION.git
+[submodule "external/SWORDINTELLIGENCE"]
+	path = external/SWORDINTELLIGENCE
+	url = https://github.com/SWORDOps/SWORDINTELLIGENCE.git

@@ -6,7 +6,29 @@ This directory contains git submodules for external SWORDIntel projects integrat
 
 ## 📦 Included Submodules
 
-### 1. HURRICANE
+### 1. SWORDINTELLIGENCE
+**Repository:** https://github.com/SWORDOps/SWORDINTELLIGENCE
+**Purpose:** Main intelligence platform and web interface
+
+**Features:**
+- ASP.NET Core 8.0 web application
+- Real-time intelligence analysis
+- SignalR WebSocket support
+- Integration with MISP, OpenCTI, Neo4j
+- JWT authentication
+- Automated analysis workflows
+
+**Integration:**
+- Docker Compose: `docker-compose.intelligence.yml`
+- Caddy routes:
+  - `{DOMAIN}` (root domain)
+  - `swordintelligence.{DOMAIN}`
+- Core service (always deployed)
+- Exposed on port 5000 internally
+
+---
+
+### 2. HURRICANE
 **Repository:** https://github.com/SWORDIntel/HURRICANE
 **Purpose:** IPv6-over-IPv4 tunnel daemon with multiple backend support
 
@@ -28,7 +50,7 @@ This directory contains git submodules for external SWORDIntel projects integrat
 
 ---
 
-### 2. ARTICBASTION
+### 3. ARTICBASTION
 **Repository:** https://github.com/SWORDIntel/ARTICBASTION (Private)
 **Purpose:** Secure gateway and bastion host for administrative access
 
@@ -46,7 +68,7 @@ This directory contains git submodules for external SWORDIntel projects integrat
 
 ---
 
-### 3. CLOUDCLEAR
+### 4. CLOUDCLEAR
 **Repository:** https://github.com/SWORDIntel/CLOUDCLEAR
 **Purpose:** Cloud provider detection and intelligence platform
 
