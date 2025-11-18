@@ -1264,47 +1264,90 @@ harden_firewall() {
     pause
 }
 
-harden_ssh() {
-    log_section "SSH Hardening"
-    audit_log "INFO" "Starting SSH hardening"
+create_admin_user() {
+    log_section "Create Dedicated Admin User"
+    audit_log "INFO" "Creating dedicated admin user"
 
-    local sshd_config="/etc/ssh/sshd_config"
-    local backup="${sshd_config}.backup-$(date +%s)"
+    log_info "Creating a dedicated admin user is more secure than using root"
+    echo ""
 
-    log_info "Backing up SSH config to: $backup"
-    cp "$sshd_config" "$backup"
+    prompt_input "Enter username for new admin user" "vpsadmin" ADMIN_USERNAME
 
-    log_info "Applying SSH hardening..."
-
-    # Create hardened configuration
-    cat >> "$sshd_config" <<'EOF'
-
-# VPS2.0 Security Hardening
-PermitRootLogin prohibit-password
-PasswordAuthentication no
-ChallengeResponseAuthentication no
-UsePAM yes
-X11Forwarding no
-PrintMotd no
-AcceptEnv LANG LC_*
-ClientAliveInterval 300
-ClientAliveCountMax 2
-MaxAuthTries 3
-MaxSessions 5
-LoginGraceTime 60
-EOF
-
-    log_warn "SSH configuration updated. You MUST have SSH key authentication set up!"
-    log_warn "Current SSH keys will continue to work."
-
-    if prompt_confirm "Restart SSH service to apply changes?"; then
-        systemctl restart sshd >> "$LOG_FILE" 2>&1
-        log_success "SSH service restarted"
-        audit_log "SUCCESS" "SSH hardened and restarted"
+    # Check if user already exists
+    if id "$ADMIN_USERNAME" &> /dev/null; then
+        log_warn "User $ADMIN_USERNAME already exists"
+        if ! prompt_confirm "Configure existing user?"; then
+            pause
+            return 0
+        fi
     else
-        log_warn "SSH not restarted (run 'systemctl restart sshd' manually)"
+        log_info "Creating user: $ADMIN_USERNAME"
+        useradd -m -s /bin/bash "$ADMIN_USERNAME" >> "$LOG_FILE" 2>&1
+
+        # Set password
+        log_info "Set password for $ADMIN_USERNAME"
+        passwd "$ADMIN_USERNAME"
     fi
 
+    # Add to sudo group
+    log_info "Adding $ADMIN_USERNAME to sudo group..."
+    usermod -aG sudo "$ADMIN_USERNAME" >> "$LOG_FILE" 2>&1
+
+    # Setup SSH directory
+    local user_home=$(eval echo ~"$ADMIN_USERNAME")
+    local ssh_dir="${user_home}/.ssh"
+
+    if [[ ! -d "$ssh_dir" ]]; then
+        log_info "Creating SSH directory..."
+        mkdir -p "$ssh_dir"
+        chmod 700 "$ssh_dir"
+        chown "${ADMIN_USERNAME}:${ADMIN_USERNAME}" "$ssh_dir"
+    fi
+
+    # Copy root's authorized_keys if exists
+    if [[ -f /root/.ssh/authorized_keys ]]; then
+        if prompt_confirm "Copy root's SSH keys to $ADMIN_USERNAME?"; then
+            cp /root/.ssh/authorized_keys "${ssh_dir}/authorized_keys"
+            chmod 600 "${ssh_dir}/authorized_keys"
+            chown "${ADMIN_USERNAME}:${ADMIN_USERNAME}" "${ssh_dir}/authorized_keys"
+            log_success "SSH keys copied"
+        fi
+    fi
+
+    log_success "Admin user $ADMIN_USERNAME created and configured"
+    log_info "Test SSH access with: ssh ${ADMIN_USERNAME}@<server-ip>"
+    audit_log "SUCCESS" "Admin user $ADMIN_USERNAME created"
+
+    pause
+}
+
+harden_ssh() {
+    log_section "SSH Security Recommendations"
+    audit_log "INFO" "Reviewing SSH security"
+
+    log_info "SSH Security Best Practices (manual configuration recommended):"
+    echo ""
+    echo "  ${YELLOW}⚠${NC}  SSH hardening must be done carefully to avoid lockout"
+    echo ""
+    echo "  ${BOLD}Recommended SSH hardening steps:${NC}"
+    echo "    1. Create dedicated admin user (Option 1 in this menu)"
+    echo "    2. Test SSH access with new user"
+    echo "    3. Manually edit /etc/ssh/sshd_config:"
+    echo "       - Consider disabling root login: PermitRootLogin no"
+    echo "       - Consider key-only auth: PasswordAuthentication no"
+    echo "       - Add session limits: MaxAuthTries 3, MaxSessions 5"
+    echo "    4. Keep port 22 as-is (others may use it)"
+    echo "    5. Test before restarting sshd!"
+    echo ""
+    echo "  ${BOLD}Current SSH Configuration:${NC}"
+    grep -E "^(PermitRootLogin|PasswordAuthentication|Port|MaxAuthTries)" /etc/ssh/sshd_config 2>/dev/null || echo "    Unable to read config"
+    echo ""
+
+    log_warn "Automatic SSH hardening disabled to prevent lockout"
+    log_info "Manually edit /etc/ssh/sshd_config when ready"
+    log_info "Backup before changes: cp /etc/ssh/sshd_config /etc/ssh/sshd_config.backup"
+
+    audit_log "INFO" "SSH security recommendations displayed"
     pause
 }
 
@@ -1422,10 +1465,11 @@ security_hardening() {
         log_header "Security Hardening"
 
         local options=(
-            "Full Hardening (All options)"
+            "Create Dedicated Admin User (Do this FIRST!)"
+            "Full Auto-Hardening (Kernel/Firewall/Docker/Fail2ban/Audit)"
             "Kernel Parameter Hardening"
             "Firewall Configuration (UFW)"
-            "SSH Hardening"
+            "SSH Security Recommendations"
             "Docker Security"
             "Install Fail2ban"
             "Setup Audit Logging"
@@ -1438,44 +1482,59 @@ security_hardening() {
 
         case $choice in
             1)
-                # Full hardening
-                audit_log "INFO" "Starting full security hardening"
-                harden_kernel_parameters
-                harden_firewall
-                harden_ssh
-                harden_docker
-                install_fail2ban
-                setup_audit_logging
-                log_success "Full security hardening complete"
-                audit_log "SUCCESS" "Full security hardening completed"
-                pause
-                return 0
+                # Create admin user FIRST
+                create_admin_user
                 ;;
-            2) harden_kernel_parameters ;;
-            3) harden_firewall ;;
-            4) harden_ssh ;;
-            5) harden_docker ;;
-            6) install_fail2ban ;;
-            7) setup_audit_logging ;;
-            8)
+            2)
+                # Full auto-hardening (safe options only)
+                audit_log "INFO" "Starting full auto-hardening"
+                log_warn "This will apply automatic hardening (SSH must be configured manually)"
+                echo ""
+                if prompt_confirm "Proceed with auto-hardening?"; then
+                    harden_kernel_parameters
+                    harden_firewall
+                    harden_docker
+                    install_fail2ban
+                    setup_audit_logging
+                    echo ""
+                    log_success "Auto-hardening complete"
+                    log_warn "Configure SSH hardening manually (Option 5)"
+                    audit_log "SUCCESS" "Full auto-hardening completed"
+                fi
+                pause
+                ;;
+            3) harden_kernel_parameters ;;
+            4) harden_firewall ;;
+            5) harden_ssh ;;
+            6) harden_docker ;;
+            7) install_fail2ban ;;
+            8) setup_audit_logging ;;
+            9)
                 log_info "Current Security Status:"
                 echo ""
-                echo "  Firewall (UFW):"
+                echo "  ${BOLD}User Configuration:${NC}"
+                echo "    Current user: $(whoami)"
+                echo "    Sudo access: $(groups | grep -q sudo && echo "Yes" || echo "No")"
+                echo ""
+                echo "  ${BOLD}Firewall (UFW):${NC}"
                 if command -v ufw &> /dev/null; then
                     ufw status | head -20
                 else
                     echo "    Not installed"
                 fi
                 echo ""
-                echo "  Fail2ban:"
+                echo "  ${BOLD}Fail2ban:${NC}"
                 if command -v fail2ban-client &> /dev/null; then
                     fail2ban-client status 2>/dev/null || echo "    Not running"
                 else
                     echo "    Not installed"
                 fi
                 echo ""
-                echo "  Docker Security:"
+                echo "  ${BOLD}Docker Security:${NC}"
                 docker info --format '{{.SecurityOptions}}' 2>/dev/null || echo "    Unable to retrieve"
+                echo ""
+                echo "  ${BOLD}SSH Configuration:${NC}"
+                grep -E "^(Port|PermitRootLogin|PasswordAuthentication)" /etc/ssh/sshd_config 2>/dev/null || echo "    Unable to read"
                 echo ""
                 pause
                 ;;
