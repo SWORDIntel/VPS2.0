@@ -48,6 +48,10 @@ services:
       - SECRET_KEY=${POLYGOTYA_SECRET_KEY}
       - ADMIN_PASSWORD=${POLYGOTYA_ADMIN_PASSWORD}
 
+      # Callback encryption
+      - DGA_SEED=${POLYGOTYA_DGA_SEED:-insovietrussiawehackyou}
+      - CALLBACK_URL=${POLYGOTYA_CALLBACK_URL:-https://polygotya.swordintelligence.airforce}
+
       # Server configuration
       - PORT=5000
       - DB_PATH=/data/ssh_callbacks_secure.db

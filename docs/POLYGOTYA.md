@@ -12,6 +12,7 @@ VPS2.0 integration of POLYGOTTEM SECURE SSH Callback Server with TEMPEST Level C
 
 **Security Features:**
 - **Post-Quantum Cryptography** (ML-KEM-1024, ML-DSA-87)
+- **XOR Encryption with DGA** - Domain Generation Algorithm key derivation with 24-hour rotation
 - **TEMPEST Level C** compliant UI (Amber/Green on Black)
 - **User/Password Authentication** with bcrypt + SHA-512
 - **Session Management** with configurable timeout
@@ -19,6 +20,7 @@ VPS2.0 integration of POLYGOTTEM SECURE SSH Callback Server with TEMPEST Level C
 - **Account Lockout** after 5 failed attempts (30-minute lock)
 - **TLS 1.3 Only** with strong ciphers (AES-256-GCM, ChaCha20)
 - **Rate Limiting** (5 req/s API, 10 req/s dashboard)
+- **IP Address Display** in callback UI
 
 ---
 
@@ -132,6 +134,60 @@ The dashboard provides:
 - ✅ Monospace fonts (consistent character width)
 - ✅ Minimal animations (reduces EMI)
 - ✅ No external resource loading
+
+### XOR Encryption with DGA
+
+**Purpose:** Protect callback data from casual network monitoring and provide stealth for SSH persistence verification.
+
+**How It Works:**
+
+1. **Key Generation**: Both client and server generate the same encryption key using:
+   - DGA Seed (shared secret): `insovietrussiawehackyou` (configurable)
+   - Current date/time period
+   - SHA-256 hashing
+
+2. **Encryption**: Client XORs callback data with the generated key and Base64 encodes it
+
+3. **Transmission**: Encrypted data sent with `{"encrypted": true, "data": "base64_ciphertext"}`
+
+4. **Decryption**: Server generates the same key (time-synchronized) and decrypts
+
+5. **Key Rotation**: Keys automatically rotate every 24 hours (configurable)
+
+**Key Benefits:**
+- **No Key Exchange** - DGA eliminates need for key distribution
+- **Automatic Rotation** - New key every rotation period
+- **Simple & Fast** - XOR is extremely fast, works on resource-constrained targets
+- **Obfuscation** - Protects callback data from casual network monitoring
+- **Stealth** - Encrypted data appears as random Base64, no obvious structure
+- **Clock Skew Tolerance** - Accepts previous rotation period keys
+
+**Configuration:**
+
+```bash
+# In .env file
+POLYGOTYA_DGA_SEED=insovietrussiawehackyou  # Must match between client/server
+```
+
+**Client Usage:**
+
+```bash
+# Using client script (encrypted by default)
+python3 ssh-callback-server/client_callback.py \
+  --api-key YOUR_API_KEY \
+  --auto-detect
+
+# Disable encryption (legacy mode)
+python3 ssh-callback-server/client_callback.py \
+  --api-key YOUR_API_KEY \
+  --auto-detect \
+  --no-encrypt
+```
+
+**Bidirectional Compatibility:**
+- Server accepts both encrypted and unencrypted callbacks
+- Allows gradual migration to encrypted mode
+- Legacy systems can continue to use unencrypted mode
 
 ---
 
@@ -447,6 +503,8 @@ docker exec polygotya sqlite3 /data/ssh_callbacks_secure.db \
 | `POLYGOTYA_SECRET_KEY` | - | Flask session secret |
 | `POLYGOTYA_ADMIN_PASSWORD` | auto-generated | Default admin password |
 | `POLYGOTYA_SESSION_TIMEOUT` | 3600 | Session timeout in seconds (1 hour) |
+| `POLYGOTYA_DGA_SEED` | insovietrussiawehackyou | DGA seed for XOR encryption key derivation (must match client/server) |
+| `POLYGOTYA_CALLBACK_URL` | https://polygotya.swordintelligence.airforce | Production server URL for client scripts |
 
 ---
 
@@ -456,14 +514,16 @@ docker exec polygotya sqlite3 /data/ssh_callbacks_secure.db \
 - ✅ Secure SSH callback server at `polygotya.swordintelligence.airforce`
 - ✅ TLS 1.3 with strong ciphers (AES-256-GCM, ChaCha20)
 - ✅ Post-Quantum Cryptography (ML-KEM-1024, ML-DSA-87)
+- ✅ XOR Encryption with DGA (24-hour key rotation, clock skew tolerance)
 - ✅ TEMPEST Level C compliant UI (Amber/Green on Black)
 - ✅ Network isolation (internal Docker network)
-- ✅ Real-time dashboard with statistics
+- ✅ Real-time dashboard with statistics and IP address display
 - ✅ Persistent SQLite database
 - ✅ Audit logging with integrity verification
 - ✅ Account lockout protection
 - ✅ Rate limiting (5 req/s API, 10 req/s dashboard)
 - ✅ Automated backup capability
+- ✅ Bidirectional compatibility (encrypted and unencrypted callbacks)
 
 **Next Steps:**
 1. Complete initial deployment
