@@ -1,0 +1,149 @@
+{
+  "title": "P0 Incident Response",
+  "description": "Critical incident requiring immediate response - system outage, active breach, or RCE exploitation",
+  "checklists": [
+    {
+      "title": "1. Initial Response (0-5 minutes)",
+      "items": [
+        {
+          "title": "Declare P0 incident in #p0-incidents channel",
+          "description": "Use /incident start to begin playbook run"
+        },
+        {
+          "title": "Assign Incident Commander (IC)",
+          "description": "IC coordinates all response activities and makes decisions"
+        },
+        {
+          "title": "Create dedicated incident channel",
+          "description": "Auto-created by playbook, invite key responders"
+        },
+        {
+          "title": "Page on-call security and ops teams",
+          "description": "Use PagerDuty/Opsgenie integration or manual page"
+        },
+        {
+          "title": "Brief assessment: What is broken? What is the impact?",
+          "description": "Document in incident channel, update every 15 minutes"
+        }
+      ]
+    },
+    {
+      "title": "2. Containment (5-30 minutes)",
+      "items": [
+        {
+          "title": "Isolate affected systems if active breach suspected",
+          "description": "Firewall rules, network segmentation, disable accounts"
+        },
+        {
+          "title": "Capture forensic evidence BEFORE making changes",
+          "description": "Memory dumps, logs, network captures, disk images"
+        },
+        {
+          "title": "Identify attack vector or root cause",
+          "description": "Check logs: Caddy, Mattermost, DNS, database, system logs"
+        },
+        {
+          "title": "Stop the bleeding - prevent further damage",
+          "description": "Kill malicious processes, block IPs, revoke credentials"
+        },
+        {
+          "title": "Notify stakeholders (internal/external as needed)",
+          "description": "Update status page, inform management, consider legal/PR"
+        }
+      ]
+    },
+    {
+      "title": "3. Investigation & Root Cause Analysis (30min-2hrs)",
+      "items": [
+        {
+          "title": "Timeline reconstruction - when did this start?",
+          "description": "Correlate logs from VictoriaMetrics, Loki, application logs"
+        },
+        {
+          "title": "Identify IOCs (Indicators of Compromise)",
+          "description": "Malicious IPs, domains, file hashes, user agents"
+        },
+        {
+          "title": "Check for lateral movement or persistence",
+          "description": "Review SSH keys, cron jobs, Docker containers, network connections"
+        },
+        {
+          "title": "Assess scope: What data was accessed/exfiltrated?",
+          "description": "Database queries, file access logs, network egress"
+        },
+        {
+          "title": "Document all findings in incident channel",
+          "description": "Evidence links, screenshots, command outputs"
+        }
+      ]
+    },
+    {
+      "title": "4. Remediation & Recovery (2-6 hours)",
+      "items": [
+        {
+          "title": "Patch vulnerabilities or fix root cause",
+          "description": "Apply security updates, fix misconfigurations"
+        },
+        {
+          "title": "Rotate ALL potentially compromised credentials",
+          "description": "Database passwords, API keys, SSH keys, certificates"
+        },
+        {
+          "title": "Restore from clean backup if system compromised",
+          "description": "Use latest verified-clean backup, not most recent"
+        },
+        {
+          "title": "Verify system integrity and functionality",
+          "description": "Run health checks, test critical paths"
+        },
+        {
+          "title": "Monitor for reinfection or additional attacks",
+          "description": "Enhanced logging, IDS alerts, anomaly detection"
+        }
+      ]
+    },
+    {
+      "title": "5. Post-Incident (6-24 hours)",
+      "items": [
+        {
+          "title": "Write incident report with timeline",
+          "description": "What happened, impact, root cause, remediation"
+        },
+        {
+          "title": "Schedule post-mortem meeting (within 48 hours)",
+          "description": "Blameless review, focus on process improvements"
+        },
+        {
+          "title": "Create follow-up tasks for hardening",
+          "description": "File Jira tickets or GitLab issues for action items"
+        },
+        {
+          "title": "Update runbooks and detection rules",
+          "description": "Add new IOCs to blocklists, improve monitoring"
+        },
+        {
+          "title": "Close incident and archive channel",
+          "description": "Mark as resolved, export logs for retention"
+        }
+      ]
+    }
+  ],
+  "reminder_message_template": "**Status Update Required**\n\nIt's been 15 minutes since the last update. Please provide:\n- Current status\n- Actions taken\n- Next steps\n- ETA to resolution",
+  "reminder_timer_default_seconds": 900,
+  "metrics": [
+    {
+      "title": "Time to Detection",
+      "description": "Time from initial compromise to detection"
+    },
+    {
+      "title": "Time to Containment",
+      "description": "Time from detection to containment"
+    },
+    {
+      "title": "Total Incident Duration",
+      "description": "Time from detection to full resolution"
+    }
+  ],
+  "retrospective_enabled": true,
+  "retrospective_template": "# Incident Retrospective\n\n## What Happened?\n\n## Timeline\n\n## Impact\n\n## Root Cause\n\n## What Went Well?\n\n## What Could Be Improved?\n\n## Action Items\n"
+}

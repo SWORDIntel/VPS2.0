@@ -1,0 +1,133 @@
+{
+  "title": "Emergency Security Patch Deployment",
+  "description": "Deploy critical security patches for CVEs, RCE vulnerabilities, or active exploits",
+  "checklists": [
+    {
+      "title": "1. Assessment & Planning (0-15 minutes)",
+      "items": [
+        {
+          "title": "Identify affected systems and components",
+          "description": "Which services/containers need patching?"
+        },
+        {
+          "title": "Review CVE details and exploit status",
+          "description": "Is exploit code public? Active exploitation in the wild?"
+        },
+        {
+          "title": "Determine patch urgency (P0/P1/P2)",
+          "description": "P0 = Active exploitation, P1 = Public exploit, P2 = Vulnerability disclosed"
+        },
+        {
+          "title": "Create maintenance window or approve emergency change",
+          "description": "Notify users if downtime required"
+        },
+        {
+          "title": "Assign patch lead and backup",
+          "description": "Someone to execute, someone to verify"
+        }
+      ]
+    },
+    {
+      "title": "2. Pre-Deployment Checklist",
+      "items": [
+        {
+          "title": "BACKUP EVERYTHING before making changes",
+          "description": "Run ./scripts/backup-all.sh or manual backups"
+        },
+        {
+          "title": "Verify backup integrity",
+          "description": "Test restore on a small file/table"
+        },
+        {
+          "title": "Download and verify patch/update",
+          "description": "Check signatures, SHA256 sums"
+        },
+        {
+          "title": "Review patch notes and breaking changes",
+          "description": "Any config changes or compatibility issues?"
+        },
+        {
+          "title": "Prepare rollback plan",
+          "description": "Document exact steps to revert if patch fails"
+        }
+      ]
+    },
+    {
+      "title": "3. Deployment (15-60 minutes)",
+      "items": [
+        {
+          "title": "Enable maintenance mode if available",
+          "description": "Prevent user access during patch"
+        },
+        {
+          "title": "Apply patch/update to affected systems",
+          "description": "Document exact commands used"
+        },
+        {
+          "title": "Restart services as needed",
+          "description": "Use docker-compose restart or systemctl"
+        },
+        {
+          "title": "Monitor logs during restart",
+          "description": "Check for errors, failed health checks"
+        },
+        {
+          "title": "Verify patch applied successfully",
+          "description": "Check version numbers, test vulnerability scanner"
+        }
+      ]
+    },
+    {
+      "title": "4. Testing & Validation (30-60 minutes)",
+      "items": [
+        {
+          "title": "Run smoke tests on critical paths",
+          "description": "Login, DNS resolution, API calls, database queries"
+        },
+        {
+          "title": "Verify vulnerability is actually fixed",
+          "description": "Rerun exploit PoC in test environment"
+        },
+        {
+          "title": "Check performance metrics",
+          "description": "CPU, memory, response times normal?"
+        },
+        {
+          "title": "Test integrations and dependencies",
+          "description": "GitLab, Prometheus, SMTP, DNS, etc."
+        },
+        {
+          "title": "Disable maintenance mode, restore access",
+          "description": "Monitor for user issues"
+        }
+      ]
+    },
+    {
+      "title": "5. Post-Deployment",
+      "items": [
+        {
+          "title": "Update documentation with new versions",
+          "description": "Update README, version tracking"
+        },
+        {
+          "title": "Notify users that patch is complete",
+          "description": "Status page update, email, Mattermost announcement"
+        },
+        {
+          "title": "Monitor for 24 hours",
+          "description": "Enhanced alerting, watch for regressions"
+        },
+        {
+          "title": "File post-mortem if incident-driven",
+          "description": "Document why patch was needed, lessons learned"
+        },
+        {
+          "title": "Schedule follow-up review",
+          "description": "Ensure no other systems need same patch"
+        }
+      ]
+    }
+  ],
+  "reminder_message_template": "**Patch Deployment Progress Check**\n\nPlease update:\n- Current phase\n- Any issues encountered\n- ETA to completion",
+  "reminder_timer_default_seconds": 1800
+}
