@@ -485,6 +485,90 @@ metrics.{$DOMAIN:localhost} {
     respond 403
 }
 
+# CLOUDCLEAR - Cloud Provider Detection & Intelligence
+cloudclear.{$DOMAIN:localhost} {
+    import security_headers
+    import rate_limit_standard
+    import compression
+    import access_log cloudclear
+
+    # TEMPEST Level C: Additional security headers
+    header {
+        X-Frame-Options SAMEORIGIN
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' ws: wss:; frame-ancestors 'self';"
+        X-Robots-Tag "noindex, nofollow"
+    }
+
+    # Handle WebSocket connections
+    @websockets {
+        header Connection *Upgrade*
+        header Upgrade websocket
+    }
+
+    handle @websockets {
+        reverse_proxy cloudclear:8080 {
+            import standard_proxy
+            header_up Upgrade {http.request.header.Upgrade}
+            header_up Connection {http.request.header.Connection}
+        }
+    }
+
+    # Handle API requests
+    handle_path /api/* {
+        import rate_limit_api
+        reverse_proxy cloudclear:8080 {
+            import standard_proxy
+        }
+    }
+
+    # Serve web UI and static assets
+    reverse_proxy cloudclear:8080 {
+        import standard_proxy
+    }
+}
+
+# CLOUDCLEAR - Specific swordintelligence.airforce subdomain
+CLOUDCLEAR.swordintelligence.airforce {
+    import security_headers
+    import rate_limit_standard
+    import compression
+    import access_log cloudclear
+
+    # TEMPEST Level C: Additional security headers
+    header {
+        X-Frame-Options SAMEORIGIN
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' ws: wss:; frame-ancestors 'self';"
+        X-Robots-Tag "noindex, nofollow"
+    }
+
+    # Handle WebSocket connections
+    @websockets {
+        header Connection *Upgrade*
+        header Upgrade websocket
+    }
+
+    handle @websockets {
+        reverse_proxy cloudclear:8080 {
+            import standard_proxy
+            header_up Upgrade {http.request.header.Upgrade}
+            header_up Connection {http.request.header.Connection}
+        }
+    }
+
+    # Handle API requests
+    handle_path /api/* {
+        import rate_limit_api
+        reverse_proxy cloudclear:8080 {
+            import standard_proxy
+        }
+    }
+
+    # Serve web UI and static assets
+    reverse_proxy cloudclear:8080 {
+        import standard_proxy
+    }
+}
+
 #==============================================
 # Default/Catch-all
 #==============================================

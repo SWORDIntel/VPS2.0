@@ -308,6 +308,40 @@ setup_services() {
     fi
 
     echo ""
+    if prompt_yes_no "Deploy CLOUDCLEAR cloud provider detection?" "n"; then
+        DEPLOY_CLOUDCLEAR=true
+
+        echo ""
+        log_info "CLOUDCLEAR Configuration:"
+        log_info "Cloud provider detection and intelligence platform"
+        log_info "API keys are optional - basic detection works without them"
+        echo ""
+
+        if prompt_yes_no "Configure intelligence API keys now?" "n"; then
+            prompt_input "Shodan API Key (optional)" "" CLOUDCLEAR_SHODAN_API_KEY
+            prompt_input "Censys API ID (optional)" "" CLOUDCLEAR_CENSYS_API_ID
+            prompt_input "Censys API Secret (optional)" "" CLOUDCLEAR_CENSYS_API_SECRET
+            prompt_input "VirusTotal API Key (optional)" "" CLOUDCLEAR_VIRUSTOTAL_API_KEY
+        fi
+    else
+        DEPLOY_CLOUDCLEAR=false
+    fi
+
+    echo ""
+    if prompt_yes_no "Deploy ARTICBASTION quantum-secure gateway?" "n"; then
+        DEPLOY_ARTICBASTION=true
+
+        echo ""
+        log_info "ARTICBASTION Configuration:"
+        log_info "Quantum-resistant mesh security platform with traffic tunneling"
+        log_info "Provides SOCKS5 and HTTP(S) proxy for routing traffic"
+        echo ""
+        log_warn "Note: ARTICBASTION requires significant resources (1GB+ RAM)"
+    else
+        DEPLOY_ARTICBASTION=false
+    fi
+
+    echo ""
     if prompt_yes_no "Deploy blockchain explorers?" "n"; then
         DEPLOY_BLOCKCHAIN=true
 
@@ -397,6 +431,8 @@ show_summary() {
     echo -e "  Monitoring:         ${GREEN}${CHECK}${NC}"
     echo -e "  GitLab:             ${GREEN}${CHECK}${NC}"
     [[ "$DEPLOY_HURRICANE" == "true" ]] && echo -e "  HURRICANE:          ${GREEN}${CHECK}${NC}" || echo -e "  HURRICANE:          ${YELLOW}Skip${NC}"
+    [[ "$DEPLOY_CLOUDCLEAR" == "true" ]] && echo -e "  CLOUDCLEAR:         ${GREEN}${CHECK}${NC}" || echo -e "  CLOUDCLEAR:         ${YELLOW}Skip${NC}"
+    [[ "$DEPLOY_ARTICBASTION" == "true" ]] && echo -e "  ARTICBASTION:       ${GREEN}${CHECK}${NC}" || echo -e "  ARTICBASTION:       ${YELLOW}Skip${NC}"
     [[ "$DEPLOY_BLOCKCHAIN" == "true" ]] && echo -e "  Blockchain:         ${GREEN}${CHECK}${NC}" || echo -e "  Blockchain:         ${YELLOW}Skip${NC}"
     echo ""
 
@@ -488,6 +524,44 @@ HE_PASSWORD=$HE_PASSWORD
 HE_TUNNEL_ID=$HE_TUNNEL_ID
 EOF
     fi
+
+    # CLOUDCLEAR configuration
+    cat >> "${PROJECT_ROOT}/.env" <<EOF
+
+#==============================================
+# CLOUDCLEAR Configuration
+#==============================================
+DEPLOY_CLOUDCLEAR=$DEPLOY_CLOUDCLEAR
+CLOUDCLEAR_SECRET_KEY=$(generate_password)
+CLOUDCLEAR_MAX_CONCURRENT_SCANS=10
+CLOUDCLEAR_SCAN_TIMEOUT=300
+EOF
+
+    if [[ "$DEPLOY_CLOUDCLEAR" == "true" ]]; then
+        cat >> "${PROJECT_ROOT}/.env" <<EOF
+CLOUDCLEAR_SHODAN_API_KEY=${CLOUDCLEAR_SHODAN_API_KEY:-}
+CLOUDCLEAR_CENSYS_API_ID=${CLOUDCLEAR_CENSYS_API_ID:-}
+CLOUDCLEAR_CENSYS_API_SECRET=${CLOUDCLEAR_CENSYS_API_SECRET:-}
+CLOUDCLEAR_VIRUSTOTAL_API_KEY=${CLOUDCLEAR_VIRUSTOTAL_API_KEY:-}
+EOF
+    fi
+
+    # ARTICBASTION configuration
+    cat >> "${PROJECT_ROOT}/.env" <<EOF
+
+#==============================================
+# ARTICBASTION Configuration
+#==============================================
+DEPLOY_ARTICBASTION=$DEPLOY_ARTICBASTION
+ARTICBASTION_DB_PASSWORD=$(generate_password)
+ARTICBASTION_INSTANCE_ID=$(uuidgen 2>/dev/null || echo "vps2-$(date +%s)")
+ARTICBASTION_PORT=8022
+ARTICBASTION_SOCKS5_PORT=1081
+ARTICBASTION_HTTP_PROXY_PORT=8890
+ARTICBASTION_HTTPS_PROXY_PORT=8891
+HURRICANE_HTTP_PROXY_PORT=8888
+HURRICANE_HTTPS_PROXY_PORT=8889
+EOF
 
     if [[ "$ENABLE_S3" == "true" ]]; then
         cat >> "${PROJECT_ROOT}/.env" <<EOF
@@ -742,6 +816,17 @@ execute_deployment() {
     if [[ "$DEPLOY_HURRICANE" == "true" ]]; then
         log_info "Deploying HURRICANE..."
         docker-compose -f "${PROJECT_ROOT}/docker-compose.hurricane.yml" up -d
+    fi
+
+    if [[ "$DEPLOY_CLOUDCLEAR" == "true" ]]; then
+        log_info "Deploying CLOUDCLEAR..."
+        docker-compose -f "${PROJECT_ROOT}/docker-compose.cloudclear.yml" up -d
+    fi
+
+    if [[ "$DEPLOY_ARTICBASTION" == "true" ]]; then
+        log_info "Deploying ARTICBASTION..."
+        log_info "This may take several minutes to build..."
+        docker-compose -f "${PROJECT_ROOT}/docker-compose.articbastion.yml" up -d --build
     fi
 
     log_success "Deployment complete!"

@@ -1,0 +1,165 @@
+version: '3.9'
+
+# ARTICBASTION - Quantum-Resistant Mesh Security Platform
+# Secure gateway with traffic tunneling and mesh networking capabilities
+
+services:
+  articbastion:
+    build:
+      context: ./external/ARTICBASTION
+      dockerfile: Dockerfile.vps2
+    image: articbastion:latest
+    container_name: articbastion
+    hostname: articbastion
+    restart: unless-stopped
+
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN      # For network routing and tunnel management
+      - NET_RAW        # For packet manipulation
+      - NET_BIND_SERVICE  # For binding to privileged ports
+      - SYS_PTRACE     # For security monitoring
+
+    security_opt:
+      - no-new-privileges:true
+      - seccomp:unconfined  # Required for eBPF and advanced monitoring
+
+    devices:
+      - /dev/net/tun:/dev/net/tun  # For VPN/tunnel functionality
+
+    environment:
+      TZ: UTC
+
+      # ARTICBASTION Configuration
+      BASTION_MODE: "gateway"
+      BASTION_LISTEN_PORT: ${ARTICBASTION_PORT:-8022}
+
+      # Mesh Networking
+      MESH_ENABLED: "true"
+      MESH_DISCOVERY_PORT: ${ARTICBASTION_MESH_PORT:-7946}
+      MESH_SECURE_PORT: ${ARTICBASTION_MESH_SECURE_PORT:-7947}
+
+      # Proxy/Tunnel Configuration
+      SOCKS5_ENABLED: "true"
+      SOCKS5_PORT: ${ARTICBASTION_SOCKS5_PORT:-1081}
+      HTTP_PROXY_ENABLED: "true"
+      HTTP_PROXY_PORT: ${ARTICBASTION_HTTP_PROXY_PORT:-8890}
+      HTTPS_PROXY_PORT: ${ARTICBASTION_HTTPS_PROXY_PORT:-8891}
+
+      # Security Features
+      QUANTUM_CRYPTO_ENABLED: "true"
+      HONEYPOT_ENABLED: ${ARTICBASTION_HONEYPOT_ENABLED:-true}
+      OBFUSCATION_ENABLED: "true"
+
+      # Monitoring
+      MONITORING_ENABLED: "true"
+      METRICS_PORT: ${ARTICBASTION_METRICS_PORT:-9091}
+
+      # Database (CockroachDB integration)
+      DB_HOST: ${ARTICBASTION_DB_HOST:-}
+      DB_PORT: ${ARTICBASTION_DB_PORT:-26257}
+      DB_NAME: ${ARTICBASTION_DB_NAME:-articbastion}
+      DB_USER: ${ARTICBASTION_DB_USER:-articbastion}
+      DB_PASSWORD: ${ARTICBASTION_DB_PASSWORD}
+
+      # Authentication
+      INSTANCE_ID: ${ARTICBASTION_INSTANCE_ID}
+      REQUIRE_CLIENT_CERT: "true"
+
+    volumes:
+      - articbastion_data:/var/lib/articbastion
+      - articbastion_config:/etc/articbastion
+      - articbastion_logs:/var/log/articbastion
+      - articbastion_certs:/etc/articbastion/certs
+      - ./logs/articbastion:/app/logs
+
+    networks:
+      dmz:
+        ipv4_address: 172.30.0.11
+      frontend:
+      backend:
+      # Allow traffic routing through ARTICBASTION
+      isolated:
+      monitoring:
+
+    ports:
+      # Gateway/Bastion SSH
+      - "${ARTICBASTION_PORT:-8022}:8022"
+
+      # Mesh networking
+      - "${ARTICBASTION_MESH_PORT:-7946}:7946"       # Mesh discovery
+      - "${ARTICBASTION_MESH_PORT:-7946}:7946/udp"   # Mesh discovery UDP
+      - "${ARTICBASTION_MESH_SECURE_PORT:-7947}:7947"  # Mesh secure channel
+
+      # Proxy/Tunnel interfaces - EXPOSED for traffic routing
+      - "${ARTICBASTION_SOCKS5_PORT:-1081}:1081"      # SOCKS5 Proxy
+      - "${ARTICBASTION_HTTP_PROXY_PORT:-8890}:8890"  # HTTP Proxy
+      - "${ARTICBASTION_HTTPS_PROXY_PORT:-8891}:8891" # HTTPS Proxy
+
+      # Monitoring
+      - "${ARTICBASTION_METRICS_PORT:-9091}:9091"     # Prometheus metrics
+
+      # Dashboard
+      - "${ARTICBASTION_DASHBOARD_PORT:-5000}:5000"   # Web UI
+
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv4.conf.all.rp_filter=0
+      - net.ipv4.conf.default.rp_filter=0
+      - net.ipv6.conf.all.forwarding=1
+      - net.ipv6.conf.all.disable_ipv6=0
+
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; s=socket.socket(); s.connect(('localhost',8022)); s.close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "5"
+        compress: "true"
+
+    labels:
+      com.vps2.service: "articbastion"
+      com.vps2.description: "Quantum-Resistant Mesh Security Gateway"
+      com.vps2.category: "security"
+      com.vps2.tier: "optional"
+
+volumes:
+  articbastion_data:
+    driver: local
+  articbastion_config:
+    driver: local
+  articbastion_logs:
+    driver: local
+  articbastion_certs:
+    driver: local
+
+networks:
+  dmz:
+    external: true
+    name: vps2_dmz
+  frontend:
+    external: true
+    name: vps2_frontend
+  backend:
+    external: true
+    name: vps2_backend
+  isolated:
+    external: true
+    name: vps2_isolated
+  monitoring:
+    external: true
+    name: vps2_monitoring

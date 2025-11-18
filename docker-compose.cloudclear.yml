@@ -1,0 +1,85 @@
+version: '3.9'
+
+# CloudClear - Cloud Provider Detection & Intelligence Platform
+# Integrated into VPS2.0 Infrastructure
+
+services:
+  cloudclear:
+    build:
+      context: ./external/CLOUDCLEAR
+      dockerfile: Dockerfile
+    container_name: cloudclear
+    hostname: cloudclear
+    restart: unless-stopped
+
+    environment:
+      # Docker environment marker
+      DOCKER_CONTAINER: "true"
+
+      # Intelligence Service API Keys
+      SHODAN_API_KEY: ${CLOUDCLEAR_SHODAN_API_KEY:-}
+      CENSYS_API_ID: ${CLOUDCLEAR_CENSYS_API_ID:-}
+      CENSYS_API_SECRET: ${CLOUDCLEAR_CENSYS_API_SECRET:-}
+      VIRUSTOTAL_API_KEY: ${CLOUDCLEAR_VIRUSTOTAL_API_KEY:-}
+
+      # Cloud Provider API Keys (optional)
+      CLOUDFLARE_API_KEY: ${CLOUDCLEAR_CLOUDFLARE_API_KEY:-}
+      CLOUDFLARE_API_EMAIL: ${CLOUDCLEAR_CLOUDFLARE_API_EMAIL:-}
+      CLOUDFLARE_ACCOUNT_ID: ${CLOUDCLEAR_CLOUDFLARE_ACCOUNT_ID:-}
+      AKAMAI_CLIENT_TOKEN: ${CLOUDCLEAR_AKAMAI_CLIENT_TOKEN:-}
+      AKAMAI_CLIENT_SECRET: ${CLOUDCLEAR_AKAMAI_CLIENT_SECRET:-}
+      AKAMAI_ACCESS_TOKEN: ${CLOUDCLEAR_AKAMAI_ACCESS_TOKEN:-}
+      AWS_ACCESS_KEY_ID: ${CLOUDCLEAR_AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${CLOUDCLEAR_AWS_SECRET_ACCESS_KEY:-}
+      AWS_REGION: ${CLOUDCLEAR_AWS_REGION:-us-east-1}
+      AZURE_SUBSCRIPTION_ID: ${CLOUDCLEAR_AZURE_SUBSCRIPTION_ID:-}
+      AZURE_CLIENT_ID: ${CLOUDCLEAR_AZURE_CLIENT_ID:-}
+      AZURE_CLIENT_SECRET: ${CLOUDCLEAR_AZURE_CLIENT_SECRET:-}
+      AZURE_TENANT_ID: ${CLOUDCLEAR_AZURE_TENANT_ID:-}
+      GCP_PROJECT_ID: ${CLOUDCLEAR_GCP_PROJECT_ID:-}
+      GCP_SERVICE_ACCOUNT_KEY: ${CLOUDCLEAR_GCP_SERVICE_ACCOUNT_KEY:-}
+
+      # API Server Configuration
+      API_HOST: "0.0.0.0"
+      API_PORT: "8080"
+      API_WORKERS: "4"
+      MAX_CONCURRENT_SCANS: ${CLOUDCLEAR_MAX_CONCURRENT_SCANS:-10}
+      SCAN_TIMEOUT: ${CLOUDCLEAR_SCAN_TIMEOUT:-300}
+      SECRET_KEY: ${CLOUDCLEAR_SECRET_KEY}
+
+    volumes:
+      - cloudclear-data:/root/.cloudclear
+      - ./logs/cloudclear:/app/logs
+      - ./external/CLOUDCLEAR/web:/app/web:ro
+
+    networks:
+      - frontend
+      - backend
+
+    security_opt:
+      - no-new-privileges:true
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+    labels:
+      com.vps2.service: "cloudclear"
+      com.vps2.description: "Cloud Provider Detection & Intelligence Platform"
+      com.vps2.category: "intelligence"
+      com.vps2.tier: "optional"
+
+volumes:
+  cloudclear-data:
+    driver: local
+
+networks:
+  frontend:
+    external: true
+    name: vps2_frontend
+  backend:
+    external: true
+    name: vps2_backend
