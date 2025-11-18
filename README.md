@@ -10,64 +10,80 @@
 
 ## 🚀 Quick Start
 
-### One-Liner Installation (Recommended)
+### 🎯 Unified Deployment Manager (RECOMMENDED)
 
-Deploy the entire platform with a single command:
+**The easiest way to deploy VPS2.0** - Interactive menu-driven deployment:
+
+```bash
+# Clone repository
+git clone https://github.com/SWORDIntel/VPS2.0.git
+cd VPS2.0
+
+# Launch interactive deployment manager
+sudo ./deploy-vps2.sh
+```
+
+**Or for quick default installation:**
+```bash
+sudo ./deploy-vps2.sh --quick
+```
+
+**Features:**
+- 🎨 **Interactive TUI Menu** - Easy navigation and selection
+- 🔧 **Component Selection** - Choose Mattermost, POLYGOTYA, DNS Hub, Intelligence
+- 🔐 **Auto Credential Generation** - Secure passwords for all services
+- 📊 **Progress Tracking** - Real-time deployment status
+- ✅ **Health Verification** - Automatic post-deployment checks
+- 💾 **Backup & Restore** - Integrated backup/restore workflows
+- 🛡️ **Security Hardening** - One-click security configuration
+- 📈 **System Status** - Real-time monitoring and health checks
+
+**Deployment Options:**
+1. **Fresh Installation** - Complete guided setup (recommended for new deployments)
+2. **Add Components** - Add Mattermost, POLYGOTYA, or other services later
+3. **Remove Components** - Clean removal of optional components
+4. **Update/Upgrade** - Pull latest images and redeploy
+5. **Backup & Restore** - Full platform backup/restore
+6. **System Status** - Health checks and monitoring
+7. **Security Hardening** - Apply security best practices
+8. **Configuration** - Domain setup, credential management
+
+---
+
+### Alternative Installation Methods
+
+#### One-Liner Remote Installation
+
+Deploy from remote URL (when available):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/SWORDIntel/VPS2.0/main/install.sh | sudo bash
 ```
 
-Or with verbose logging for monitoring progress:
+#### Local Archive Installation
+
+If you've downloaded the VPS2.0 archive:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/SWORDIntel/VPS2.0/main/install.sh | sudo bash -s -- --verbose
-```
-
-**Features:**
-- ✅ Automatic OS detection and prerequisites installation
-- ✅ Docker and Docker Compose setup
-- ✅ Interactive configuration wizard
-- ✅ Security hardening and credential generation
-- ✅ DNS verification and service deployment
-- ✅ Post-deployment health checks
-
-See [Quick Start Guide](./docs/QUICK_START.md) for detailed options and troubleshooting.
-
-### Local Setup (When Archive is Uploaded)
-
-If you've downloaded and extracted the VPS2.0 archive to your server:
-
-```bash
-# Extract the archive
 tar -xzf VPS2.0.tar.gz
 cd VPS2.0
-
-# Run local setup script
-sudo bash setup.sh
+sudo ./deploy-vps2.sh
 ```
 
-**Features:**
-- ✅ Validates Docker installation
-- ✅ Checks system requirements
-- ✅ Verifies repository structure
-- ✅ Launches interactive setup wizard
+#### Manual Component Deployment (Advanced)
 
-### Manual Installation (Advanced)
+For advanced users who want granular control:
 
 ```bash
-# Clone the repository
+# Clone repository
 git clone https://github.com/SWORDIntel/VPS2.0.git
 cd VPS2.0
 
-# Run interactive setup wizard
-sudo ./scripts/setup-wizard.sh
-
-# Or deploy directly
-sudo ./scripts/deploy.sh
-
-# Apply security hardening
-sudo ./scripts/harden.sh
+# Deploy specific components
+sudo ./scripts/deploy.sh              # Core services
+sudo ./scripts/mattermost/initial-setup.sh  # Mattermost
+sudo ./scripts/polygotya-quickstart.sh      # POLYGOTYA
+sudo ./scripts/harden.sh                    # Security hardening
 ```
 
 **That's it!** Your complete intelligence platform is now running.
