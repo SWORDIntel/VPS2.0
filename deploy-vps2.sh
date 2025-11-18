@@ -280,6 +280,505 @@ get_deployment_status() {
 }
 
 #==============================================
+# ZFS Setup
+#==============================================
+
+setup_zfs() {
+    log_section "ZFS Filesystem Setup"
+    audit_log "INFO" "Starting ZFS setup"
+
+    log_warn "ZFS setup will build from source (v2.3.5) and configure storage"
+    log_warn "This should be done BEFORE deploying services"
+    echo ""
+
+    if ! prompt_confirm "Proceed with ZFS setup?"; then
+        return 0
+    fi
+
+    # Install build dependencies
+    log_info "Installing build dependencies..."
+    apt-get update >> "$LOG_FILE" 2>&1
+
+    local build_deps=(
+        build-essential
+        autoconf
+        automake
+        libtool
+        gawk
+        alien
+        fakeroot
+        dkms
+        libblkid-dev
+        uuid-dev
+        libudev-dev
+        libssl-dev
+        zlib1g-dev
+        libaio-dev
+        libattr1-dev
+        libelf-dev
+        python3
+        python3-dev
+        python3-setuptools
+        python3-cffi
+        libffi-dev
+        libcurl4-openssl-dev
+        libtirpc-dev
+        libtirpc3
+        libpam0g-dev
+        bc
+        wget
+    )
+
+    log_info "Installing: ${build_deps[*]}"
+    apt-get install -y "${build_deps[@]}" >> "$LOG_FILE" 2>&1 || {
+        log_error "Failed to install build dependencies"
+        pause
+        return 1
+    }
+    log_success "Build dependencies installed"
+
+    # Build ZFS from source
+    if ! command -v zfs &> /dev/null || ! zfs --version 2>&1 | grep -q "2.3.5"; then
+        log_info "Building ZFS 2.3.5 from source..."
+
+        local zfs_version="2.3.5"
+        local zfs_tarball="zfs-${zfs_version}.tar.gz"
+        local zfs_url="https://github.com/openzfs/zfs/releases/download/zfs-${zfs_version}/${zfs_tarball}"
+        local build_dir="/tmp/zfs-build-$$"
+
+        mkdir -p "$build_dir"
+        cd "$build_dir"
+
+        log_info "Downloading ZFS ${zfs_version}..."
+        if ! wget "$zfs_url" -O "$zfs_tarball" >> "$LOG_FILE" 2>&1; then
+            log_error "Failed to download ZFS"
+            rm -rf "$build_dir"
+            pause
+            return 1
+        fi
+
+        log_info "Extracting tarball..."
+        tar xzf "$zfs_tarball" >> "$LOG_FILE" 2>&1
+        cd "zfs-${zfs_version}"
+
+        log_info "Configuring build (this may take several minutes)..."
+        ./configure >> "$LOG_FILE" 2>&1 || {
+            log_error "Configuration failed"
+            cd /
+            rm -rf "$build_dir"
+            pause
+            return 1
+        }
+
+        log_info "Compiling ZFS (this will take 10-30 minutes depending on CPU)..."
+        make -j$(nproc) >> "$LOG_FILE" 2>&1 || {
+            log_error "Compilation failed"
+            cd /
+            rm -rf "$build_dir"
+            pause
+            return 1
+        }
+
+        log_info "Installing ZFS..."
+        make install >> "$LOG_FILE" 2>&1 || {
+            log_error "Installation failed"
+            cd /
+            rm -rf "$build_dir"
+            pause
+            return 1
+        }
+
+        # Install DKMS module
+        log_info "Installing DKMS module..."
+        make install-dkms >> "$LOG_FILE" 2>&1 || log_warn "DKMS install had warnings"
+
+        # Update library cache
+        ldconfig >> "$LOG_FILE" 2>&1
+
+        # Load ZFS kernel module
+        log_info "Loading ZFS kernel module..."
+        modprobe zfs >> "$LOG_FILE" 2>&1 || {
+            log_error "Failed to load ZFS kernel module"
+            log_warn "You may need to reboot and run this again"
+            cd /
+            rm -rf "$build_dir"
+            pause
+            return 1
+        }
+
+        # Cleanup
+        cd /
+        rm -rf "$build_dir"
+
+        log_success "ZFS 2.3.5 compiled and installed"
+    else
+        log_success "ZFS already installed: $(zfs --version | head -1)"
+    fi
+    audit_log "SUCCESS" "ZFS toolchain installed"
+
+    # Check available disks
+    log_info "Available disks:"
+    echo ""
+    lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,FSTYPE | grep -E "disk|part"
+    echo ""
+
+    # Ask if user wants to create ZFS pool
+    if prompt_confirm "Create a new ZFS pool?"; then
+        create_zfs_pool
+    else
+        log_info "Skipping ZFS pool creation"
+    fi
+
+    # Benchmark compression
+    if prompt_confirm "Benchmark ZFS compression algorithms?"; then
+        benchmark_zfs_compression
+    fi
+
+    # Configure ZFS for Docker
+    if prompt_confirm "Configure ZFS dataset for Docker?"; then
+        configure_zfs_docker
+    fi
+
+    log_success "ZFS setup complete"
+    audit_log "SUCCESS" "ZFS setup completed"
+    pause
+}
+
+create_zfs_pool() {
+    log_info "Creating ZFS pool..."
+    echo ""
+
+    # List available disks again
+    log_info "Available disks (showing only unpartitioned disks):"
+    lsblk -dpno NAME,SIZE,TYPE | grep disk
+    echo ""
+
+    prompt_input "Enter disk device (e.g., /dev/sdb)" "" DISK_DEVICE
+
+    if [[ ! -b "$DISK_DEVICE" ]]; then
+        log_error "Invalid disk device: $DISK_DEVICE"
+        return 1
+    fi
+
+    # Confirm disk selection
+    log_warn "WARNING: This will DESTROY all data on $DISK_DEVICE"
+    lsblk "$DISK_DEVICE"
+    echo ""
+
+    if ! prompt_confirm "Are you SURE you want to use $DISK_DEVICE?"; then
+        log_info "Cancelled ZFS pool creation"
+        return 0
+    fi
+
+    prompt_input "Enter ZFS pool name" "vps-data" POOL_NAME
+
+    # Pool configuration options
+    log_info "ZFS pool configuration options:"
+    echo "  1. Single disk (no redundancy)"
+    echo "  2. Mirror (requires 2 disks)"
+    echo "  3. RAIDZ (requires 3+ disks)"
+    echo ""
+    prompt_input "Select configuration" "1" POOL_CONFIG
+
+    case "$POOL_CONFIG" in
+        1)
+            # Single disk
+            log_info "Creating single-disk ZFS pool: $POOL_NAME"
+            if zpool create -f "$POOL_NAME" "$DISK_DEVICE" >> "$LOG_FILE" 2>&1; then
+                log_success "ZFS pool created: $POOL_NAME"
+            else
+                log_error "Failed to create ZFS pool"
+                return 1
+            fi
+            ;;
+        2)
+            # Mirror
+            prompt_input "Enter second disk device (e.g., /dev/sdc)" "" DISK_DEVICE2
+            if [[ ! -b "$DISK_DEVICE2" ]]; then
+                log_error "Invalid second disk device: $DISK_DEVICE2"
+                return 1
+            fi
+
+            log_info "Creating mirrored ZFS pool: $POOL_NAME"
+            if zpool create -f "$POOL_NAME" mirror "$DISK_DEVICE" "$DISK_DEVICE2" >> "$LOG_FILE" 2>&1; then
+                log_success "ZFS pool created: $POOL_NAME (mirrored)"
+            else
+                log_error "Failed to create ZFS pool"
+                return 1
+            fi
+            ;;
+        3)
+            # RAIDZ
+            log_info "Enter all disk devices separated by spaces (minimum 3):"
+            prompt_input "Disk devices" "" DISK_DEVICES
+
+            log_info "Creating RAIDZ ZFS pool: $POOL_NAME"
+            if zpool create -f "$POOL_NAME" raidz $DISK_DEVICES >> "$LOG_FILE" 2>&1; then
+                log_success "ZFS pool created: $POOL_NAME (RAIDZ)"
+            else
+                log_error "Failed to create ZFS pool"
+                return 1
+            fi
+            ;;
+        *)
+            log_error "Invalid selection"
+            return 1
+            ;;
+    esac
+
+    # Enable compression
+    if prompt_confirm "Enable ZFS compression (lz4)?"; then
+        zfs set compression=lz4 "$POOL_NAME" >> "$LOG_FILE" 2>&1
+        log_success "Compression enabled on $POOL_NAME"
+    fi
+
+    # Set atime off (performance)
+    zfs set atime=off "$POOL_NAME" >> "$LOG_FILE" 2>&1
+    log_success "atime disabled for better performance"
+
+    # Show pool status
+    echo ""
+    log_info "ZFS pool status:"
+    zpool status "$POOL_NAME"
+    echo ""
+
+    # Save pool name to state
+    save_state "zfs_pool" "$POOL_NAME"
+    audit_log "SUCCESS" "ZFS pool created: $POOL_NAME on $DISK_DEVICE"
+}
+
+benchmark_zfs_compression() {
+    log_section "ZFS Compression Benchmark"
+    audit_log "INFO" "Starting compression benchmark"
+
+    local pool_name=$(load_state "zfs_pool" "")
+
+    if [[ -z "$pool_name" ]]; then
+        # Try to find existing pool
+        pool_name=$(zpool list -H -o name 2>/dev/null | head -1)
+        if [[ -z "$pool_name" ]]; then
+            log_error "No ZFS pool found"
+            pause
+            return 1
+        fi
+    fi
+
+    log_info "Benchmarking compression on pool: $pool_name"
+    log_info "This will test all available compression algorithms with sample data"
+    echo ""
+
+    # Create test dataset
+    local test_dataset="${pool_name}/compression-benchmark"
+    log_info "Creating test dataset..."
+    zfs create "$test_dataset" >> "$LOG_FILE" 2>&1 || {
+        log_warn "Test dataset may already exist, destroying and recreating..."
+        zfs destroy -r "$test_dataset" >> "$LOG_FILE" 2>&1
+        zfs create "$test_dataset" >> "$LOG_FILE" 2>&1
+    }
+
+    # Generate test data (100MB of mixed data)
+    local test_file="/$(zfs get -H -o value mountpoint "$test_dataset")/test-data.bin"
+    log_info "Generating 100MB test data..."
+
+    # Mix of compressible and incompressible data (realistic scenario)
+    dd if=/dev/urandom of="${test_file}.random" bs=1M count=30 >> "$LOG_FILE" 2>&1
+    dd if=/dev/zero of="${test_file}.zero" bs=1M count=50 >> "$LOG_FILE" 2>&1
+    cat "${test_file}.random" "${test_file}.zero" > "$test_file"
+    rm -f "${test_file}.random" "${test_file}.zero"
+
+    # Available compression algorithms
+    local algorithms=(
+        "off"
+        "lz4"
+        "gzip"
+        "gzip-1"
+        "gzip-9"
+        "zstd"
+        "zstd-fast"
+        "zstd-1"
+        "zstd-3"
+        "zstd-6"
+        "zstd-9"
+        "zstd-12"
+        "zstd-15"
+        "zstd-19"
+    )
+
+    echo ""
+    log_info "Testing compression algorithms..."
+    echo ""
+    printf "%-15s %-15s %-15s %-15s\n" "Algorithm" "Size (MB)" "Ratio" "Write Speed"
+    printf "%-15s %-15s %-15s %-15s\n" "==========" "=========" "=====" "==========="
+
+    local best_ratio="0"
+    local best_ratio_algo=""
+    local best_speed="0"
+    local best_speed_algo=""
+
+    for algo in "${algorithms[@]}"; do
+        # Set compression algorithm
+        zfs set compression="$algo" "$test_dataset" >> "$LOG_FILE" 2>&1
+
+        # Clear previous data
+        rm -f "$test_file" >> "$LOG_FILE" 2>&1
+        sync
+
+        # Write test file and measure time
+        local start_time=$(date +%s.%N)
+        dd if=/dev/urandom of="${test_file}" bs=1M count=100 oflag=sync 2>>"$LOG_FILE"
+        local end_time=$(date +%s.%N)
+        sync
+
+        # Calculate write speed
+        local duration=$(echo "$end_time - $start_time" | bc)
+        local speed=$(echo "scale=2; 100 / $duration" | bc)
+
+        # Get actual size used
+        local used=$(zfs get -H -o value -p used "$test_dataset")
+        local used_mb=$(echo "scale=2; $used / 1048576" | bc)
+
+        # Calculate compression ratio
+        local ratio=$(zfs get -H -o value compressratio "$test_dataset")
+
+        printf "%-15s %-15s %-15s %-15s\n" "$algo" "$used_mb" "$ratio" "${speed} MB/s"
+
+        # Track best compression ratio
+        local ratio_val=$(echo "$ratio" | sed 's/x//')
+        if (( $(echo "$ratio_val > $best_ratio" | bc -l) )); then
+            best_ratio="$ratio_val"
+            best_ratio_algo="$algo"
+        fi
+
+        # Track best speed
+        if (( $(echo "$speed > $best_speed" | bc -l) )); then
+            best_speed="$speed"
+            best_speed_algo="$algo"
+        fi
+    done
+
+    echo ""
+    log_success "Benchmark complete"
+    echo ""
+    echo "  ${BOLD}Best Compression Ratio:${NC} ${GREEN}${best_ratio_algo}${NC} (${best_ratio}x)"
+    echo "  ${BOLD}Best Write Speed:${NC} ${GREEN}${best_speed_algo}${NC} (${best_speed} MB/s)"
+    echo ""
+
+    # Recommendations
+    log_info "${BOLD}Recommendations:${NC}"
+    echo "  • ${GREEN}lz4${NC} - Best for general use (excellent speed, good compression)"
+    echo "  • ${GREEN}zstd${NC} or ${GREEN}zstd-3${NC} - Balanced compression and speed"
+    echo "  • ${GREEN}zstd-6${NC} to ${GREEN}zstd-9${NC} - Higher compression, slightly slower"
+    echo "  • ${GREEN}gzip-9${NC} or ${GREEN}zstd-15${NC} - Maximum compression (slower writes)"
+    echo ""
+
+    # Cleanup test dataset
+    log_info "Cleaning up test dataset..."
+    zfs destroy -r "$test_dataset" >> "$LOG_FILE" 2>&1
+
+    # Ask to apply best settings
+    echo ""
+    if prompt_confirm "Apply recommended compression (lz4) to pool?"; then
+        zfs set compression=lz4 "$pool_name" >> "$LOG_FILE" 2>&1
+        log_success "Compression set to lz4 on $pool_name"
+        save_state "zfs_compression" "lz4"
+    else
+        prompt_input "Enter compression algorithm to use" "lz4" COMPRESSION_ALGO
+        zfs set compression="$COMPRESSION_ALGO" "$pool_name" >> "$LOG_FILE" 2>&1
+        log_success "Compression set to $COMPRESSION_ALGO on $pool_name"
+        save_state "zfs_compression" "$COMPRESSION_ALGO"
+    fi
+
+    audit_log "SUCCESS" "Compression benchmark completed, best ratio: $best_ratio_algo, best speed: $best_speed_algo"
+    pause
+}
+
+configure_zfs_docker() {
+    log_info "Configuring ZFS dataset for Docker..."
+
+    local pool_name=$(load_state "zfs_pool" "")
+
+    if [[ -z "$pool_name" ]]; then
+        # Try to find existing pool
+        pool_name=$(zpool list -H -o name 2>/dev/null | head -1)
+        if [[ -z "$pool_name" ]]; then
+            log_error "No ZFS pool found"
+            prompt_input "Enter ZFS pool name" "" pool_name
+        fi
+    fi
+
+    log_info "Using ZFS pool: $pool_name"
+
+    # Create datasets for Docker
+    log_info "Creating ZFS datasets for Docker..."
+
+    # Stop Docker first
+    if systemctl is-active --quiet docker; then
+        log_warn "Stopping Docker to configure ZFS storage..."
+        systemctl stop docker >> "$LOG_FILE" 2>&1
+    fi
+
+    # Create datasets
+    zfs create -o mountpoint=/var/lib/docker "${pool_name}/docker" >> "$LOG_FILE" 2>&1 || {
+        log_warn "Dataset ${pool_name}/docker may already exist"
+    }
+
+    zfs create "${pool_name}/docker/volumes" >> "$LOG_FILE" 2>&1 || true
+    zfs create "${pool_name}/docker/containers" >> "$LOG_FILE" 2>&1 || true
+
+    # Set properties
+    zfs set compression=lz4 "${pool_name}/docker" >> "$LOG_FILE" 2>&1
+    zfs set atime=off "${pool_name}/docker" >> "$LOG_FILE" 2>&1
+
+    # Configure Docker to use ZFS
+    local daemon_json="/etc/docker/daemon.json"
+    local backup="${daemon_json}.backup-$(date +%s)"
+
+    if [[ -f "$daemon_json" ]]; then
+        cp "$daemon_json" "$backup"
+        log_info "Backed up Docker config to: $backup"
+    fi
+
+    log_info "Configuring Docker to use ZFS storage driver..."
+
+    # Create or update daemon.json
+    cat > "$daemon_json" <<EOF
+{
+  "storage-driver": "zfs",
+  "storage-opts": [
+    "zfs.fsname=${pool_name}/docker"
+  ],
+  "icc": false,
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  },
+  "live-restore": true,
+  "userland-proxy": false,
+  "no-new-privileges": true
+}
+EOF
+
+    log_success "Docker configured to use ZFS"
+
+    # Start Docker
+    if prompt_confirm "Start Docker with ZFS storage?"; then
+        systemctl start docker >> "$LOG_FILE" 2>&1
+        sleep 5
+
+        if systemctl is-active --quiet docker; then
+            log_success "Docker started with ZFS storage"
+            docker info | grep -i storage
+        else
+            log_error "Failed to start Docker"
+            log_warn "Check logs: journalctl -xeu docker"
+        fi
+    fi
+
+    audit_log "SUCCESS" "ZFS configured for Docker on ${pool_name}/docker"
+}
+
+#==============================================
 # Prerequisites Check
 #==============================================
 
@@ -410,7 +909,7 @@ check_prerequisites() {
     fi
 
     # Check required commands
-    local required_cmds=(curl wget openssl sed awk grep)
+    local required_cmds=(curl wget openssl sed awk grep bc)
     for cmd in "${required_cmds[@]}"; do
         if ! command -v "$cmd" &> /dev/null; then
             log_error "Required command not found: $cmd"
@@ -1704,6 +2203,7 @@ main_menu() {
         show_banner
 
         local options=(
+            "ZFS Disk Setup (Do this FIRST for new VPS!)"
             "Fresh Installation (Guided Setup)"
             "Add Components"
             "Remove Components"
@@ -1721,10 +2221,11 @@ main_menu() {
         read -p "$(echo -e "  ${CYAN}${ICON_ARROW}${NC}  Enter selection: ")" choice
 
         case $choice in
-            1) fresh_installation ;;
-            2) add_components ;;
-            3) remove_components ;;
-            4)
+            1) setup_zfs ;;
+            2) fresh_installation ;;
+            3) add_components ;;
+            4) remove_components ;;
+            5)
                 log_info "Pulling latest images..."
                 audit_log "INFO" "Updating service images"
                 if execute_cmd "docker-compose pull" "Pull latest images" 600; then
@@ -1736,12 +2237,12 @@ main_menu() {
                 fi
                 pause
                 ;;
-            5) backup_restore_menu ;;
-            6) system_status ;;
-            7) security_hardening ;;
-            8) rollback_menu ;;
-            9) configuration_menu ;;
-            10) show_deployment_summary ;;
+            6) backup_restore_menu ;;
+            7) system_status ;;
+            8) security_hardening ;;
+            9) rollback_menu ;;
+            10) configuration_menu ;;
+            11) show_deployment_summary ;;
             0)
                 log_info "Exiting VPS2.0 Deployment Manager"
                 audit_log "INFO" "User exited deployment manager"
