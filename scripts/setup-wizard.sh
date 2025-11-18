@@ -328,6 +328,20 @@ setup_services() {
     fi
 
     echo ""
+    if prompt_yes_no "Deploy ARTICBASTION quantum-secure gateway?" "n"; then
+        DEPLOY_ARTICBASTION=true
+
+        echo ""
+        log_info "ARTICBASTION Configuration:"
+        log_info "Quantum-resistant mesh security platform with traffic tunneling"
+        log_info "Provides SOCKS5 and HTTP(S) proxy for routing traffic"
+        echo ""
+        log_warn "Note: ARTICBASTION requires significant resources (1GB+ RAM)"
+    else
+        DEPLOY_ARTICBASTION=false
+    fi
+
+    echo ""
     if prompt_yes_no "Deploy blockchain explorers?" "n"; then
         DEPLOY_BLOCKCHAIN=true
 
@@ -418,6 +432,7 @@ show_summary() {
     echo -e "  GitLab:             ${GREEN}${CHECK}${NC}"
     [[ "$DEPLOY_HURRICANE" == "true" ]] && echo -e "  HURRICANE:          ${GREEN}${CHECK}${NC}" || echo -e "  HURRICANE:          ${YELLOW}Skip${NC}"
     [[ "$DEPLOY_CLOUDCLEAR" == "true" ]] && echo -e "  CLOUDCLEAR:         ${GREEN}${CHECK}${NC}" || echo -e "  CLOUDCLEAR:         ${YELLOW}Skip${NC}"
+    [[ "$DEPLOY_ARTICBASTION" == "true" ]] && echo -e "  ARTICBASTION:       ${GREEN}${CHECK}${NC}" || echo -e "  ARTICBASTION:       ${YELLOW}Skip${NC}"
     [[ "$DEPLOY_BLOCKCHAIN" == "true" ]] && echo -e "  Blockchain:         ${GREEN}${CHECK}${NC}" || echo -e "  Blockchain:         ${YELLOW}Skip${NC}"
     echo ""
 
@@ -530,6 +545,23 @@ CLOUDCLEAR_CENSYS_API_SECRET=${CLOUDCLEAR_CENSYS_API_SECRET:-}
 CLOUDCLEAR_VIRUSTOTAL_API_KEY=${CLOUDCLEAR_VIRUSTOTAL_API_KEY:-}
 EOF
     fi
+
+    # ARTICBASTION configuration
+    cat >> "${PROJECT_ROOT}/.env" <<EOF
+
+#==============================================
+# ARTICBASTION Configuration
+#==============================================
+DEPLOY_ARTICBASTION=$DEPLOY_ARTICBASTION
+ARTICBASTION_DB_PASSWORD=$(generate_password)
+ARTICBASTION_INSTANCE_ID=$(uuidgen 2>/dev/null || echo "vps2-$(date +%s)")
+ARTICBASTION_PORT=8022
+ARTICBASTION_SOCKS5_PORT=1081
+ARTICBASTION_HTTP_PROXY_PORT=8890
+ARTICBASTION_HTTPS_PROXY_PORT=8891
+HURRICANE_HTTP_PROXY_PORT=8888
+HURRICANE_HTTPS_PROXY_PORT=8889
+EOF
 
     if [[ "$ENABLE_S3" == "true" ]]; then
         cat >> "${PROJECT_ROOT}/.env" <<EOF
@@ -789,6 +821,12 @@ execute_deployment() {
     if [[ "$DEPLOY_CLOUDCLEAR" == "true" ]]; then
         log_info "Deploying CLOUDCLEAR..."
         docker-compose -f "${PROJECT_ROOT}/docker-compose.cloudclear.yml" up -d
+    fi
+
+    if [[ "$DEPLOY_ARTICBASTION" == "true" ]]; then
+        log_info "Deploying ARTICBASTION..."
+        log_info "This may take several minutes to build..."
+        docker-compose -f "${PROJECT_ROOT}/docker-compose.articbastion.yml" up -d --build
     fi
 
     log_success "Deployment complete!"
