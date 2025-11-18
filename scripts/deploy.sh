@@ -215,6 +215,59 @@ deploy_hurricane() {
     log_success "HURRICANE deployment complete"
 }
 
+deploy_mattermost() {
+    log_info "Deploying Mattermost (optional)..."
+
+    read -p "Do you want to deploy Mattermost? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log_info "Skipping Mattermost deployment"
+        return 0
+    fi
+
+    cd "$PROJECT_ROOT"
+
+    # Update .env to enable Mattermost
+    sed -i "s/DEPLOY_MATTERMOST=false/DEPLOY_MATTERMOST=true/" "${PROJECT_ROOT}/.env"
+
+    log_info "Starting Mattermost stack..."
+    docker-compose -f docker-compose.yml -f docker-compose.mattermost.yml up -d
+
+    log_info "Waiting for Mattermost to initialize..."
+    sleep 15
+
+    log_success "Mattermost deployment complete"
+    log_info "Mattermost: https://mattermost.swordintelligence.airforce"
+    log_warn "Run initial setup: ./scripts/mattermost/initial-setup.sh"
+    log_warn "Install plugins: ./scripts/mattermost/install-plugins.sh"
+}
+
+deploy_polygotya() {
+    log_info "Deploying POLYGOTYA SSH Callback Server (optional)..."
+
+    read -p "Do you want to deploy POLYGOTYA? (y/N): " -n 1 -r
+    echo
+    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+        log_info "Skipping POLYGOTYA deployment"
+        return 0
+    fi
+
+    cd "$PROJECT_ROOT"
+
+    # Update .env to enable POLYGOTYA
+    sed -i "s/DEPLOY_POLYGOTYA=false/DEPLOY_POLYGOTYA=true/" "${PROJECT_ROOT}/.env"
+
+    log_info "Starting POLYGOTYA (TEMPEST Level C + PQC)..."
+    docker-compose -f docker-compose.yml -f docker-compose.polygotya.yml up -d
+
+    log_info "Waiting for POLYGOTYA to initialize (loading PQC libraries)..."
+    sleep 10
+
+    log_success "POLYGOTYA deployment complete"
+    log_info "POLYGOTYA: https://polygotya.swordintelligence.airforce"
+    log_info "Get admin password: docker logs polygotya | grep 'DEFAULT ADMIN'"
+}
+
 configure_firewall() {
     log_info "Configuring firewall..."
     log_warn "Preserving port 22 for SSH - ensuring it remains accessible"
@@ -282,30 +335,67 @@ EOF
 print_access_info() {
     log_success "Deployment complete!"
     echo ""
-    echo "=========================================="
+    echo "============================================================================"
     echo "VPS2.0 Access Information"
-    echo "=========================================="
+    echo "============================================================================"
     echo ""
-    echo "Portainer: https://portainer.${DOMAIN:-localhost}"
-    echo "Grafana: https://monitoring.${DOMAIN:-localhost}"
-    echo "GitLab: https://gitlab.${DOMAIN:-localhost}"
-    echo "SWORDINTELLIGENCE: https://swordintel.${DOMAIN:-localhost}"
-    echo "MISP: https://misp.${DOMAIN:-localhost}"
-    echo "OpenCTI: https://opencti.${DOMAIN:-localhost}"
+    echo "Core Services:"
+    echo "  Portainer: https://portainer.${DOMAIN:-swordintelligence.airforce}"
+    echo "  Grafana: https://grafana.${DOMAIN:-swordintelligence.airforce}"
+    echo "  GitLab: https://gitlab.${DOMAIN:-swordintelligence.airforce}"
     echo ""
-    echo "IMPORTANT:"
+    echo "Intelligence Platform:"
+    echo "  SWORDINTELLIGENCE: https://swordintel.${DOMAIN:-swordintelligence.airforce}"
+    echo "  MISP: https://misp.${DOMAIN:-swordintelligence.airforce}"
+    echo "  OpenCTI: https://opencti.${DOMAIN:-swordintelligence.airforce}"
+    echo ""
+    echo "Team Collaboration:"
+    echo "  Mattermost: https://mattermost.swordintelligence.airforce"
+    echo "  Boards: Access via Mattermost → Boards"
+    echo "  Playbooks: Access via Mattermost → Playbooks"
+    echo ""
+    echo "Security Operations:"
+    echo "  POLYGOTYA: https://polygotya.swordintelligence.airforce"
+    echo "  Admin login: docker logs polygotya | grep 'DEFAULT ADMIN'"
+    echo ""
+    echo "============================================================================"
+    echo "IMPORTANT SECURITY ACTIONS:"
+    echo "============================================================================"
     echo "1. Review and secure credentials in: ${PROJECT_ROOT}/credentials.txt"
-    echo "2. Configure your domain DNS to point to this server"
-    echo "3. Review firewall rules: ufw status"
-    echo "4. Check service health: docker-compose ps"
-    echo "5. View logs: docker-compose logs -f [service]"
+    echo "2. DELETE credentials.txt after copying to secure password manager"
+    echo "3. Configure your domain DNS to point to this server IP"
+    echo "4. Review firewall rules: ufw status"
+    echo "5. Change all default passwords on first login"
     echo ""
-    echo "Next Steps:"
-    echo "1. Run: ./scripts/harden.sh (to apply security hardening)"
-    echo "2. Run: ./scripts/backup.sh (to configure backups)"
+    echo "Mattermost Setup:"
+    echo "  1. Run: ./scripts/mattermost/initial-setup.sh"
+    echo "  2. Run: ./scripts/mattermost/install-plugins.sh"
+    echo "  3. Create admin account at https://mattermost.swordintelligence.airforce"
+    echo ""
+    echo "============================================================================"
+    echo "VERIFICATION & MONITORING:"
+    echo "============================================================================"
+    echo "Check service health:"
+    echo "  docker ps                              # List running containers"
+    echo "  docker-compose ps                      # Detailed service status"
+    echo "  docker logs <container>                # View service logs"
+    echo ""
+    echo "Health checks:"
+    echo "  curl https://polygotya.swordintelligence.airforce/health"
+    echo "  curl https://mattermost.swordintelligence.airforce/api/v4/system/ping"
+    echo ""
+    echo "============================================================================"
+    echo "NEXT STEPS:"
+    echo "============================================================================"
+    echo "1. Run: ./scripts/harden.sh              # Apply security hardening"
+    echo "2. Run: ./scripts/backup.sh              # Configure automated backups"
     echo "3. Configure WireGuard VPN for admin access"
+    echo "4. Set up DNS records for all subdomains"
+    echo "5. Configure Mattermost SMTP for email notifications"
+    echo "6. Import board templates from mattermost/boards/"
+    echo "7. Create POLYGOTYA API keys and configure clients"
     echo ""
-    echo "=========================================="
+    echo "============================================================================"
 }
 
 #==============================================
@@ -328,6 +418,8 @@ main() {
     deploy_phase1
     deploy_phase2
     deploy_hurricane
+    deploy_mattermost
+    deploy_polygotya
 
     # Post-deployment configuration
     configure_firewall
