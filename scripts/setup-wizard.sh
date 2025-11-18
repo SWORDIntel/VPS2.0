@@ -591,6 +591,121 @@ verify_dns() {
 }
 
 #==============================================
+# Caddy Configuration
+#==============================================
+
+configure_caddy_subdomains() {
+    log_step "Configuring Caddy Reverse Proxy"
+
+    local caddy_file="${PROJECT_ROOT}/caddy/Caddyfile"
+    local additions_made=false
+    local server_ip=$(curl -s ifconfig.me 2>/dev/null || echo "YOUR_SERVER_IP")
+
+    # Check if we need to add HURRICANE subdomain
+    if [[ "$DEPLOY_HURRICANE" == "true" ]]; then
+        log_info "Adding HURRICANE.swordintelligence.airforce subdomain..."
+
+        # Check if already exists
+        if ! grep -q "HURRICANE\.swordintelligence\.airforce" "$caddy_file"; then
+            # Add HURRICANE subdomain configuration
+            cat >> "$caddy_file" << 'EOF'
+
+# HURRICANE - Specific swordintelligence.airforce subdomain
+HURRICANE.swordintelligence.airforce {
+    import security_headers
+    import rate_limit_standard
+    import compression
+    import access_log hurricane
+
+    # API
+    handle_path /api/* {
+        import rate_limit_api
+        reverse_proxy hurricane:8080 {
+            import standard_proxy
+        }
+    }
+
+    # Web UI
+    reverse_proxy hurricane:8081 {
+        import standard_proxy
+    }
+}
+EOF
+            log_success "Added HURRICANE subdomain configuration"
+            additions_made=true
+        else
+            log_info "HURRICANE subdomain already configured"
+        fi
+    fi
+
+    # Check if we need to add ARTICBASTION subdomain
+    # ARTICBASTION is typically deployed with the bastion service
+    if [[ "$PROFILE_NAME" == "maximum" ]] || [[ "$PROFILE_NAME" == "full" ]]; then
+        log_info "Adding ARTICBASTION.swordintelligence.airforce subdomain..."
+
+        # Check if already exists
+        if ! grep -q "ARTICBASTION\.swordintelligence\.airforce" "$caddy_file"; then
+            # Add ARTICBASTION subdomain configuration
+            cat >> "$caddy_file" << 'EOF'
+
+# ARTICBASTION - Specific swordintelligence.airforce subdomain
+ARTICBASTION.swordintelligence.airforce {
+    import security_headers
+    import rate_limit_strict
+    import access_log bastion
+
+    # Require client certificates for bastion access
+    tls {
+        client_auth {
+            mode require_and_verify
+            trusted_ca_cert_file /config/certs/ca.crt
+        }
+    }
+
+    # Additional security headers for bastion
+    header {
+        X-Frame-Options DENY
+        Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'"
+        X-Permitted-Cross-Domain-Policies none
+        Feature-Policy "geolocation 'none'; microphone 'none'; camera 'none'"
+    }
+
+    # IP whitelist (optional - uncomment and configure)
+    # @allowed {
+    #     remote_ip 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16
+    # }
+    # handle @allowed {
+    #     reverse_proxy articbastion:8022 {
+    #         import standard_proxy
+    #     }
+    # }
+
+    # Default: reverse proxy to bastion service
+    reverse_proxy articbastion:8022 {
+        import standard_proxy
+    }
+}
+EOF
+            log_success "Added ARTICBASTION subdomain configuration"
+            additions_made=true
+        else
+            log_info "ARTICBASTION subdomain already configured"
+        fi
+    fi
+
+    if [[ "$additions_made" == true ]]; then
+        log_success "Caddy configuration updated with swordintelligence.airforce subdomains"
+        echo ""
+        log_info "DNS Records needed:"
+        [[ "$DEPLOY_HURRICANE" == "true" ]] && echo -e "  ${CYAN}→${NC} A    HURRICANE.swordintelligence.airforce    → ${GREEN}${server_ip}${NC}"
+        [[ "$PROFILE_NAME" == "maximum" ]] || [[ "$PROFILE_NAME" == "full" ]] && echo -e "  ${CYAN}→${NC} A    ARTICBASTION.swordintelligence.airforce → ${GREEN}${server_ip}${NC}"
+        echo ""
+    else
+        log_info "No Caddy configuration changes needed"
+    fi
+}
+
+#==============================================
 # Deployment
 #==============================================
 
@@ -716,6 +831,7 @@ main() {
 
     generate_env_file
     verify_dns
+    configure_caddy_subdomains
 
     execute_deployment
     post_deployment
