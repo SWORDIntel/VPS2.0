@@ -1,0 +1,64 @@
+# HURRICANE Configuration File
+# IPv6-over-IPv4 Tunnel Daemon
+
+[global]
+# Daemon settings
+daemon = false
+pid_file = /var/run/hurricane/hurricane.pid
+log_file = /var/log/hurricane/hurricane.log
+log_level = ${HURRICANE_LOG_LEVEL:-info}
+
+# API Server
+api_enabled = true
+api_host = 0.0.0.0
+api_port = ${HURRICANE_API_PORT:-8080}
+api_cors_enabled = true
+
+# Web UI
+webui_enabled = true
+webui_host = 0.0.0.0
+webui_port = ${HURRICANE_WEB_UI_PORT:-8081}
+
+# SOCKS5 Proxy
+socks5_enabled = true
+socks5_host = 0.0.0.0
+socks5_port = ${HURRICANE_SOCKS5_PORT:-1080}
+socks5_auth_required = false
+
+# Prometheus Metrics
+prometheus_enabled = ${PROMETHEUS_ENABLED:-true}
+prometheus_port = ${PROMETHEUS_PORT:-9090}
+
+[network]
+# IPv6 Configuration
+ipv6_prefix = ${IPV6_PREFIX:-}
+ipv6_gateway = ${IPV6_GATEWAY:-}
+ipv6_dns = 2001:4860:4860::8888,2001:4860:4860::8844
+
+# IPv4 Configuration
+ipv4_dns = 8.8.8.8,8.8.4.4
+
+[failover]
+# Tunnel Failover Configuration
+enabled = ${ENABLE_FAILOVER:-true}
+health_check_interval = ${HEALTH_CHECK_INTERVAL:-30}
+health_check_timeout = 10
+max_failures = 3
+
+# Health check methods
+health_check_ping = true
+health_check_http = true
+health_check_dns = true
+
+[performance]
+# Performance Tuning
+max_connections = 1000
+buffer_size = 65536
+worker_threads = 4
+
+# MCP Server (Unix Socket for AI/Automation)
+mcp_enabled = false
+mcp_socket = /var/run/hurricane/mcp.sock
+
+# Include tunnel configurations
+include = /etc/hurricane/tunnels.conf

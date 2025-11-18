@@ -1,0 +1,106 @@
+version: '3.9'
+
+# VPS2.0 - HURRICANE IPv6 Proxy Service (Optional)
+# Deploy with: docker-compose -f docker-compose.yml -f docker-compose.hurricane.yml up -d
+# Source: https://github.com/SWORDIntel/HURRICANE
+
+services:
+
+  #==============================================
+  # HURRICANE - IPv6-over-IPv4 Tunnel Daemon
+  #==============================================
+  hurricane:
+    build:
+      context: ./hurricane
+      dockerfile: Dockerfile
+      args:
+        BUILD_DATE: ${BUILD_DATE:-}
+        VCS_REF: ${VCS_REF:-}
+    image: hurricane:latest
+    container_name: hurricane
+    hostname: hurricane
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+      - NET_BIND_SERVICE
+    security_opt:
+      - no-new-privileges:true
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    environment:
+      TZ: UTC
+      # Hurricane Electric Tunnel Configuration
+      HE_ENABLED: ${HE_ENABLED:-false}
+      HE_USERNAME: ${HE_USERNAME:-}
+      HE_PASSWORD: ${HE_PASSWORD:-}
+      HE_TUNNEL_ID: ${HE_TUNNEL_ID:-}
+
+      # Mullvad VPN Configuration
+      MULLVAD_ENABLED: ${MULLVAD_ENABLED:-false}
+      MULLVAD_ACCOUNT: ${MULLVAD_ACCOUNT:-}
+
+      # WireGuard Configuration
+      WG_ENABLED: ${WG_ENABLED:-false}
+      WG_CONFIG_PATH: /etc/hurricane/wireguard
+
+      # Service Configuration
+      HURRICANE_API_PORT: 8080
+      HURRICANE_WEB_UI_PORT: 8081
+      HURRICANE_SOCKS5_PORT: 1080
+      HURRICANE_LOG_LEVEL: ${HURRICANE_LOG_LEVEL:-info}
+
+      # Monitoring
+      PROMETHEUS_ENABLED: "true"
+      PROMETHEUS_PORT: 9090
+
+      # Tunnel Failover
+      ENABLE_FAILOVER: "true"
+      HEALTH_CHECK_INTERVAL: 30
+
+      # IPv6 Settings
+      IPV6_PREFIX: ${IPV6_PREFIX:-}
+      IPV6_GATEWAY: ${IPV6_GATEWAY:-}
+    volumes:
+      - ./hurricane/config:/etc/hurricane:rw
+      - ./hurricane/credentials:/etc/hurricane/credentials:ro
+      - hurricane_data:/var/lib/hurricane
+      - hurricane_logs:/var/log/hurricane
+    networks:
+      dmz:
+        ipv4_address: 172.30.0.10
+      frontend:
+    ports:
+      - "8080:8080"      # REST API
+      - "8081:8081"      # Web UI
+      - "1080:1080"      # SOCKS5 Proxy
+      - "9090:9090"      # Prometheus Metrics
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=0
+      - net.ipv6.conf.default.forwarding=1
+      - net.ipv6.conf.all.forwarding=1
+      - net.ipv4.ip_forward=1
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+        compress: "true"
+
+volumes:
+  hurricane_data:
+  hurricane_logs:

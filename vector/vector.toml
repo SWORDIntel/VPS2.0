@@ -1,0 +1,136 @@
+# Vector Configuration for VPS2.0
+# Log collection and aggregation
+
+# Data directory
+data_dir = "/var/lib/vector"
+
+#==============================================
+# Sources
+#==============================================
+
+# Docker container logs
+[sources.docker_logs]
+type = "docker_logs"
+docker_host = "unix:///var/run/docker.sock"
+include_containers = []  # Empty means all containers
+exclude_containers = ["vector"]  # Don't collect Vector's own logs
+
+# System logs (syslog)
+[sources.syslog]
+type = "syslog"
+address = "0.0.0.0:5140"
+mode = "tcp"
+
+# Internal metrics
+[sources.internal_metrics]
+type = "internal_metrics"
+
+#==============================================
+# Transforms
+#==============================================
+
+# Parse Docker logs as JSON
+[transforms.docker_json]
+type = "remap"
+inputs = ["docker_logs"]
+source = '''
+  . = parse_json!(.message)
+  .container_name = .container
+  .timestamp = to_timestamp!(.timestamp)
+'''
+
+# Add service labels
+[transforms.add_labels]
+type = "remap"
+inputs = ["docker_json"]
+source = '''
+  .service = .container_name
+  .environment = "production"
+  .cluster = "vps2.0"
+'''
+
+# Filter out noisy logs
+[transforms.filter_noise]
+type = "filter"
+inputs = ["add_labels"]
+condition = '''
+  !contains(string!(.message), "healthcheck") &&
+  !contains(string!(.message), "metrics endpoint")
+'''
+
+# Sample high-volume logs (keep 10%)
+[transforms.sample_high_volume]
+type = "sample"
+inputs = ["filter_noise"]
+rate = 10
+key_field = "container_name"
+exclude = '''
+  contains(["swordintelligence", "misp", "opencti"], .container_name)
+'''
+
+#==============================================
+# Sinks
+#==============================================
+
+# Send to Loki
+[sinks.loki]
+type = "loki"
+inputs = ["sample_high_volume", "syslog"]
+endpoint = "http://loki:3100"
+encoding.codec = "json"
+labels.service = "{{ service }}"
+labels.container = "{{ container_name }}"
+labels.environment = "{{ environment }}"
+
+# Send metrics to VictoriaMetrics
+[sinks.victoriametrics]
+type = "prometheus_remote_write"
+inputs = ["internal_metrics"]
+endpoint = "http://victoriametrics:8428/api/v1/write"
+
+# Console output for debugging (optional)
+[sinks.console]
+type = "console"
+inputs = ["docker_json"]
+encoding.codec = "json"
+target = "stdout"
+
+# File backup for critical logs
+[sinks.file_backup]
+type = "file"
+inputs = ["add_labels"]
+path = "/var/log/vector/%Y-%m-%d/{{ container_name }}.log"
+encoding.codec = "json"
+compression = "gzip"
+
+[sinks.file_backup.buffer]
+type = "disk"
+max_size = 268435488  # 256 MB
+
+# Alert on errors (webhook to monitoring system)
+# [sinks.error_alerts]
+# type = "http"
+# inputs = ["filter_errors"]
+# uri = "https://your-webhook-url.com/alerts"
+# encoding.codec = "json"
+# method = "post"
+#
+# [sinks.error_alerts.request.headers]
+# Content-Type = "application/json"
+
+#==============================================
+# Buffers
+#==============================================
+
+[sinks.loki.buffer]
+type = "disk"
+max_size = 268435488  # 256 MB
+when_full = "block"
+
+#==============================================
+# Health Check
+#==============================================
+
+[api]
+enabled = true
+address = "0.0.0.0:8686"

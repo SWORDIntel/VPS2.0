@@ -1,0 +1,450 @@
+version: '3.9'
+
+# VPS2.0 - Intelligence & Analysis Services
+# Deploy with: docker-compose -f docker-compose.yml -f docker-compose.intelligence.yml up -d
+
+services:
+
+  #==============================================
+  # SWORDINTELLIGENCE - Main Intelligence Platform
+  #==============================================
+  swordintelligence:
+    build:
+      context: ./swordintelligence
+      dockerfile: Dockerfile
+      args:
+        DOTNET_VERSION: "8.0"
+    image: swordintelligence:latest
+    container_name: swordintelligence
+    hostname: swordintelligence
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
+    environment:
+      TZ: UTC
+      PUID: 1000
+      PGID: 1000
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:5000
+      ConnectionStrings__DefaultConnection: "Server=pgbouncer;Port=6432;Database=swordintel;User Id=swordintel;Password=${SWORDINTEL_DB_PASSWORD:?Required}"
+      ConnectionStrings__Neo4j: "bolt://neo4j:7687"
+      ConnectionStrings__Redis: "redis-stack:6379,password=${REDIS_PASSWORD}"
+      JwtSettings__Secret: ${JWT_SECRET:?Required}
+      JwtSettings__Issuer: "SWORDINTELLIGENCE"
+      JwtSettings__Audience: "SWORDOPS"
+      JwtSettings__TokenLifetime: "01:00:00"
+      IntelligenceSettings__MispUrl: "http://misp"
+      IntelligenceSettings__MispApiKey: ${MISP_API_KEY:-}
+      IntelligenceSettings__EnableAutoAnalysis: "true"
+    volumes:
+      - ./swordintelligence/appsettings.Production.json:/app/appsettings.Production.json:ro
+      - swordintel_uploads:/app/wwwroot/uploads
+      - swordintel_logs:/app/logs
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      - postgres
+      - neo4j
+      - redis-stack
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  #==============================================
+  # MISP - Threat Intelligence Platform
+  #==============================================
+  misp-db:
+    image: mariadb:10.11
+    container_name: misp-db
+    hostname: misp-db
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MISP_DB_ROOT_PASSWORD:?Required}
+      MYSQL_DATABASE: misp
+      MYSQL_USER: misp
+      MYSQL_PASSWORD: ${MISP_DB_PASSWORD:?Required}
+    volumes:
+      - misp_mysql:/var/lib/mysql
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  misp-redis:
+    image: redis:7.0-alpine
+    container_name: misp-redis
+    hostname: misp-redis
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  misp:
+    image: coolacid/misp-docker:core-latest
+    container_name: misp
+    hostname: misp
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      MYSQL_HOST: misp-db
+      MYSQL_DATABASE: misp
+      MYSQL_USER: misp
+      MYSQL_PASSWORD: ${MISP_DB_PASSWORD}
+      MISP_BASEURL: https://${DOMAIN:-localhost}/misp
+      MISP_ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@localhost}
+      MISP_ADMIN_PASSPHRASE: ${MISP_ADMIN_PASSWORD:?Required}
+      MISP_MODULES_URL: http://misp-modules:6666
+      REDIS_HOST: misp-redis
+      TIMEZONE: UTC
+    volumes:
+      - misp_data:/var/www/MISP
+      - misp_configs:/var/www/MISP/app/Config
+      - misp_logs:/var/www/MISP/app/tmp/logs
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      - misp-db
+      - misp-redis
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/users/login"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  misp-modules:
+    image: coolacid/misp-docker:modules-latest
+    container_name: misp-modules
+    hostname: misp-modules
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      REDIS_BACKEND: misp-redis
+    networks:
+      - backend
+    depends_on:
+      - misp-redis
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+
+  #==============================================
+  # OpenCTI - Structured Threat Intelligence
+  #==============================================
+  opencti-redis:
+    image: redis:7.0-alpine
+    container_name: opencti-redis
+    hostname: opencti-redis
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - opencti_redis:/data
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  opencti-elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: opencti-elasticsearch
+    hostname: opencti-elasticsearch
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms2g -Xmx2g"
+    volumes:
+      - opencti_elasticsearch:/usr/share/elasticsearch/data
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9200/_cluster/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
+  opencti-rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: opencti-rabbitmq
+    hostname: opencti-rabbitmq
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-opencti}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:?Required}
+    volumes:
+      - opencti_rabbitmq:/var/lib/rabbitmq
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  opencti:
+    image: opencti/platform:latest
+    container_name: opencti
+    hostname: opencti
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      NODE_OPTIONS: --max-old-space-size=4096
+      APP__PORT: 8080
+      APP__BASE_URL: https://${DOMAIN:-localhost}/opencti
+      APP__ADMIN__EMAIL: ${ADMIN_EMAIL:-admin@localhost}
+      APP__ADMIN__PASSWORD: ${OPENCTI_ADMIN_PASSWORD:?Required}
+      APP__ADMIN__TOKEN: ${OPENCTI_ADMIN_TOKEN:?Required}
+      REDIS__HOSTNAME: opencti-redis
+      REDIS__PORT: 6379
+      ELASTICSEARCH__URL: http://opencti-elasticsearch:9200
+      RABBITMQ__HOSTNAME: opencti-rabbitmq
+      RABBITMQ__PORT: 5672
+      RABBITMQ__USERNAME: ${RABBITMQ_USER:-opencti}
+      RABBITMQ__PASSWORD: ${RABBITMQ_PASSWORD}
+    volumes:
+      - opencti_data:/opt/opencti/data
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      - opencti-redis
+      - opencti-elasticsearch
+      - opencti-rabbitmq
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
+
+  opencti-worker:
+    image: opencti/worker:latest
+    container_name: opencti-worker
+    hostname: opencti-worker
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      OPENCTI_URL: http://opencti:8080
+      OPENCTI_TOKEN: ${OPENCTI_ADMIN_TOKEN}
+      WORKER_LOG_LEVEL: info
+    networks:
+      - backend
+    depends_on:
+      - opencti
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          memory: 512M
+
+  #==============================================
+  # Cortex - Observable Analysis
+  #==============================================
+  cortex:
+    image: thehiveproject/cortex:latest
+    container_name: cortex
+    hostname: cortex
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      JOB_DIRECTORY: /tmp/cortex-jobs
+    volumes:
+      - cortex_data:/opt/cortex/data
+      - ./cortex/analyzers:/opt/Cortex-Analyzers:ro
+    networks:
+      - backend
+    depends_on:
+      - opencti-elasticsearch
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9001/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  #==============================================
+  # n8n - Workflow Automation
+  #==============================================
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    hostname: n8n
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      N8N_HOST: ${DOMAIN:-localhost}
+      N8N_PORT: 5678
+      N8N_PROTOCOL: https
+      N8N_ENCRYPTION_KEY: ${N8N_ENCRYPTION_KEY:?Required}
+      WEBHOOK_URL: https://${DOMAIN:-localhost}/n8n/
+      GENERIC_TIMEZONE: UTC
+      DB_TYPE: postgresdb
+      DB_POSTGRESDB_HOST: pgbouncer
+      DB_POSTGRESDB_PORT: 6432
+      DB_POSTGRESDB_DATABASE: n8n
+      DB_POSTGRESDB_USER: n8n
+      DB_POSTGRESDB_PASSWORD: ${N8N_DB_PASSWORD:?Required}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      - postgres
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 256M
+
+  #==============================================
+  # YARA Scanner
+  #==============================================
+  yara-scanner:
+    build:
+      context: ./yara
+      dockerfile: Dockerfile
+    image: yara-scanner:latest
+    container_name: yara-scanner
+    hostname: yara-scanner
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./yara/rules:/rules:ro
+      - ./yara/custom-rules:/custom-rules:ro
+      - yara_samples:/samples
+    networks:
+      - backend
+    command: tail -f /dev/null  # Keep container running
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  #==============================================
+  # ClamAV
+  #==============================================
+  clamav:
+    image: clamav/clamav:stable
+    container_name: clamav
+    hostname: clamav
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - clamav_data:/var/lib/clamav
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/clamdcheck.sh"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 300s  # Takes time to download signatures
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
+volumes:
+  swordintel_uploads:
+  swordintel_logs:
+  misp_mysql:
+  misp_data:
+  misp_configs:
+  misp_logs:
+  opencti_redis:
+  opencti_elasticsearch:
+  opencti_rabbitmq:
+  opencti_data:
+  cortex_data:
+  n8n_data:
+  yara_samples:
+  clamav_data:
