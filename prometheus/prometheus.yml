@@ -145,3 +145,14 @@ scrape_configs:
         labels:
           service: 'rabbitmq'
     metrics_path: '/metrics'
+
+  # Stalwart Mail Server - Email metrics
+  - job_name: 'stalwart'
+    static_configs:
+      - targets: ['stalwart:8080']
+        labels:
+          service: 'stalwart'
+          category: 'email'
+          tier: 'optional'
+    metrics_path: '/metrics'
+    scrape_interval: 60s  # Mail metrics don't change as frequently

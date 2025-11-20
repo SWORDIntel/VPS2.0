@@ -1,0 +1,195 @@
+version: '3.8'
+
+#
+# VPS2.0 Email Module
+# Self-hosted, production-grade mail stack with Stalwart + SnappyMail
+#
+# Features:
+# - SMTP/IMAP/JMAP/ManageSieve support
+# - SPF, DKIM, DMARC, ARC, DANE, MTA-STS, TLS-RPT
+# - Built-in spam filtering and reputation tracking
+# - Full Prometheus metrics + Loki logging
+# - Webmail UI at spiderwebmail.swordintelligence.airforce
+#
+
+networks:
+  mail_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.24.0.0/24
+    labels:
+      com.vps2.network: "mail"
+      com.vps2.description: "Isolated network for mail services"
+
+  dmz:
+    external: true
+  frontend:
+    external: true
+  monitoring:
+    external: true
+
+volumes:
+  stalwart_data:
+    labels:
+      com.vps2.service: "stalwart"
+      com.vps2.backup: "critical"
+  stalwart_logs:
+    labels:
+      com.vps2.service: "stalwart"
+  snappymail_data:
+    labels:
+      com.vps2.service: "snappymail"
+      com.vps2.backup: "optional"
+
+services:
+  #
+  # Stalwart Mail Server
+  # Modern, all-in-one mail server with SMTP, IMAP, JMAP, and advanced security
+  #
+  stalwart:
+    image: stalwartlabs/mail-server:v0.10.7
+    container_name: stalwart
+    hostname: mail
+    restart: unless-stopped
+
+    networks:
+      mail_net:
+        ipv4_address: 172.24.0.10
+      frontend:
+      monitoring:
+
+    ports:
+      # SMTP
+      - "25:25"       # SMTP (MX, receiving from other servers)
+      - "587:587"     # Submission (STARTTLS, authenticated users)
+      - "465:465"     # Submissions (implicit TLS, authenticated users)
+      # IMAP
+      - "993:993"     # IMAPS (implicit TLS)
+      - "143:143"     # IMAP (STARTTLS) - optional, can be disabled
+      # ManageSieve
+      - "4190:4190"   # Sieve (STARTTLS)
+      # HTTP (admin UI and metrics - NOT exposed to internet)
+      - "127.0.0.1:8080:8080"
+
+    volumes:
+      - stalwart_data:/opt/stalwart-mail
+      - stalwart_logs:/var/log/stalwart
+      - ./stalwart/config:/etc/stalwart:ro
+      - ./stalwart/ssl:/opt/stalwart-mail/ssl:ro
+
+    environment:
+      # Core settings (overridden by config files)
+      STALWART_HOSTNAME: "${MAIL_HOSTNAME:-mail.swordintelligence.airforce}"
+      STALWART_DOMAIN: "${MAIL_DOMAIN:-swordintelligence.airforce}"
+
+      # Admin credentials (change on first run)
+      STALWART_ADMIN_USER: "${MAIL_ADMIN_USER:-admin}"
+      STALWART_ADMIN_PASSWORD: "${MAIL_ADMIN_PASSWORD:-changeme}"
+
+      # Logging
+      LOG_LEVEL: "${MAIL_LOG_LEVEL:-info}"
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    labels:
+      com.vps2.service: "stalwart"
+      com.vps2.category: "email"
+      com.vps2.tier: "optional"
+      com.vps2.description: "Stalwart Mail Server - SMTP/IMAP/JMAP"
+
+      # Prometheus metrics
+      prometheus.io/scrape: "true"
+      prometheus.io/port: "8080"
+      prometheus.io/path: "/metrics"
+
+      # Logging
+      vector.io/include: "true"
+      vector.io/parser: "json"
+
+    # Security
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE  # Required for ports <1024
+      - CHOWN
+      - SETGID
+      - SETUID
+    security_opt:
+      - no-new-privileges:true
+    read_only: false  # Needs write access to data volume
+
+  #
+  # SnappyMail - Modern Webmail Client
+  # Lightweight, fast webmail interface for IMAP access
+  #
+  snappymail:
+    image: djmaze/snappymail:v2.38.1
+    container_name: snappymail
+    hostname: webmail
+    restart: unless-stopped
+
+    networks:
+      dmz:
+      mail_net:
+        ipv4_address: 172.24.0.20
+
+    volumes:
+      - snappymail_data:/var/lib/snappymail
+      - ./snappymail/config:/etc/snappymail:ro
+
+    environment:
+      # Connect to Stalwart IMAP
+      SNAPPYMAIL_IMAP_HOST: "stalwart"
+      SNAPPYMAIL_IMAP_PORT: "993"
+      SNAPPYMAIL_IMAP_SECURE: "ssl"
+
+      # SMTP for sending (via Stalwart submission)
+      SNAPPYMAIL_SMTP_HOST: "stalwart"
+      SNAPPYMAIL_SMTP_PORT: "587"
+      SNAPPYMAIL_SMTP_SECURE: "tls"
+      SNAPPYMAIL_SMTP_AUTH: "true"
+
+      # UI Customization
+      SNAPPYMAIL_TITLE: "SWORD Intelligence Mail"
+      SNAPPYMAIL_LOADING_DESCRIPTION: "Secure Webmail"
+
+      # Security
+      SNAPPYMAIL_ATTACHMENT_SIZE_LIMIT: "25M"
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8888/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+    labels:
+      com.vps2.service: "snappymail"
+      com.vps2.category: "email"
+      com.vps2.tier: "optional"
+      com.vps2.description: "SnappyMail Webmail UI"
+
+      # Caddy routing
+      caddy: "spiderwebmail.swordintelligence.airforce"
+      caddy.reverse_proxy: "{{upstreams 8888}}"
+
+      # Logging
+      vector.io/include: "true"
+      vector.io/parser: "json"
+
+    # Security
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    security_opt:
+      - no-new-privileges:true
+    read_only: false  # Needs write access for sessions

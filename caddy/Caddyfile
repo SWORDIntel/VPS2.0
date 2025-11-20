@@ -931,6 +931,77 @@ doh.{$DOMAIN:localhost} {
 }
 
 #==============================================
+# Email Services
+#==============================================
+
+# SnappyMail - Webmail Interface
+spiderwebmail.{$DOMAIN:localhost} {
+    import security_headers
+    import rate_limit_standard
+    import compression
+    import access_log webmail
+
+    # Adjust CSP for webmail functionality
+    header {
+        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; media-src 'self'; worker-src 'self' blob:;"
+    }
+
+    # WebSocket support for real-time updates
+    @websockets {
+        header Connection *Upgrade*
+        header Upgrade websocket
+    }
+    reverse_proxy @websockets snappymail:8888 {
+        import standard_proxy
+    }
+
+    # Main webmail interface
+    reverse_proxy snappymail:8888 {
+        import standard_proxy
+
+        # Increase timeouts for large attachments
+        transport http {
+            read_timeout 300s
+            write_timeout 300s
+            dial_timeout 30s
+        }
+    }
+
+    # Static file caching
+    @static {
+        path *.css *.js *.jpg *.jpeg *.png *.gif *.ico *.woff *.woff2 *.svg *.webp
+    }
+    header @static {
+        Cache-Control "public, max-age=86400"
+    }
+}
+
+# Stalwart Admin UI - VPN/Internal Only
+mailadmin.{$DOMAIN:localhost} {
+    import security_headers
+    import rate_limit_strict
+    import compression
+    import access_log mailadmin
+
+    # IP whitelist - Only allow from WireGuard subnet + localhost
+    @allowed {
+        remote_ip 10.10.0.0/24 127.0.0.1 172.20.0.0/24 172.21.0.0/24 172.22.0.0/24 172.24.0.0/24
+    }
+
+    handle @allowed {
+        reverse_proxy stalwart:8080 {
+            import standard_proxy
+        }
+    }
+
+    # Deny all other IPs
+    respond 403 {
+        body "Access Denied: Admin UI requires VPN connection"
+        close
+    }
+}
+
+#==============================================
 # Default/Catch-all
 #==============================================
 

@@ -1,0 +1,514 @@
+/*
+ * SnappyMail TEMPEST Class C Theme
+ * SWORD Intelligence - Tactical Webmail Interface
+ *
+ * Design principles:
+ * - TEMPEST Level C compliant color scheme
+ * - High contrast for operational environments
+ * - Minimal VRAM usage (reduced emanations)
+ * - Monospace font for intelligence analyst workflow
+ * - Terminal-style aesthetic matching GOVGRABBER
+ */
+
+:root {
+    /* TEMPEST-compliant color palette */
+    --color-bg-primary: #000000;
+    --color-bg-secondary: #0a0a0a;
+    --color-bg-tertiary: #111111;
+    --color-bg-hover: #1a1a1a;
+    --color-bg-active: #222222;
+
+    /* Terminal green (amber alternative: #ff9800) */
+    --color-text-primary: #00ff00;
+    --color-text-secondary: #00cc00;
+    --color-text-tertiary: #009900;
+    --color-text-muted: #006600;
+    --color-text-disabled: #003300;
+
+    /* Accent colors */
+    --color-accent-primary: #00ff00;
+    --color-accent-danger: #ff0000;
+    --color-accent-warning: #ffff00;
+    --color-accent-info: #00ffff;
+    --color-accent-success: #00ff00;
+
+    /* Borders and dividers */
+    --color-border: #003300;
+    --color-border-bright: #00ff00;
+
+    /* Typography */
+    --font-monospace: 'Courier New', 'Consolas', 'Monaco', monospace;
+    --font-size-base: 14px;
+    --line-height-base: 1.6;
+
+    /* Spacing */
+    --spacing-xs: 4px;
+    --spacing-sm: 8px;
+    --spacing-md: 16px;
+    --spacing-lg: 24px;
+    --spacing-xl: 32px;
+
+    /* Effects */
+    --shadow-minimal: 0 0 2px rgba(0, 255, 0, 0.3);
+    --shadow-focus: 0 0 4px rgba(0, 255, 0, 0.6);
+    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Global resets and base styles */
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    background-color: var(--color-bg-primary) !important;
+    color: var(--color-text-primary) !important;
+    font-family: var(--font-monospace) !important;
+    font-size: var(--font-size-base) !important;
+    line-height: var(--line-height-base) !important;
+    margin: 0;
+    padding: 0;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Main application container */
+#rl-app,
+.rl-app {
+    background-color: var(--color-bg-primary) !important;
+    color: var(--color-text-primary) !important;
+}
+
+/* Sidebar / Folder list */
+.b-nav-side,
+.folderList,
+.sidebarMenu {
+    background-color: var(--color-bg-secondary) !important;
+    border-right: 1px solid var(--color-border-bright) !important;
+    color: var(--color-text-primary) !important;
+}
+
+.folderList-item,
+.nav-item {
+    background-color: transparent !important;
+    border-left: 3px solid transparent !important;
+    color: var(--color-text-secondary) !important;
+    padding: var(--spacing-sm) var(--spacing-md) !important;
+    transition: all var(--transition-fast);
+}
+
+.folderList-item:hover,
+.nav-item:hover {
+    background-color: var(--color-bg-hover) !important;
+    border-left-color: var(--color-accent-primary) !important;
+    color: var(--color-text-primary) !important;
+}
+
+.folderList-item.active,
+.folderList-item.selected,
+.nav-item.active {
+    background-color: var(--color-bg-active) !important;
+    border-left-color: var(--color-accent-primary) !important;
+    color: var(--color-accent-primary) !important;
+    font-weight: bold !important;
+}
+
+/* Message list */
+.messageList,
+.b-content-messagelist {
+    background-color: var(--color-bg-primary) !important;
+    border-right: 1px solid var(--color-border) !important;
+}
+
+.messageItem,
+.e-item {
+    background-color: var(--color-bg-secondary) !important;
+    border-bottom: 1px solid var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+    margin: var(--spacing-xs) 0 !important;
+    padding: var(--spacing-sm) var(--spacing-md) !important;
+    transition: all var(--transition-fast);
+}
+
+.messageItem:hover,
+.e-item:hover {
+    background-color: var(--color-bg-hover) !important;
+    box-shadow: var(--shadow-minimal);
+}
+
+.messageItem.selected,
+.messageItem.current,
+.e-item.selected {
+    background-color: var(--color-bg-active) !important;
+    border-left: 3px solid var(--color-accent-primary) !important;
+    box-shadow: var(--shadow-focus);
+}
+
+.messageItem.unseen,
+.e-item.unseen {
+    font-weight: bold !important;
+    color: var(--color-accent-primary) !important;
+}
+
+/* Message view */
+.messageView,
+.b-content-messageview {
+    background-color: var(--color-bg-primary) !important;
+    color: var(--color-text-primary) !important;
+}
+
+.messageView .subject,
+.message-subject {
+    color: var(--color-accent-primary) !important;
+    font-size: 1.2em !important;
+    font-weight: bold !important;
+    margin-bottom: var(--spacing-md) !important;
+}
+
+.messageView .from,
+.messageView .to,
+.message-header {
+    color: var(--color-text-secondary) !important;
+    font-family: var(--font-monospace) !important;
+    margin: var(--spacing-xs) 0 !important;
+}
+
+.messageView .message-body,
+.messageContent {
+    background-color: var(--color-bg-secondary) !important;
+    border: 1px solid var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+    font-family: var(--font-monospace) !important;
+    margin-top: var(--spacing-md) !important;
+    padding: var(--spacing-md) !important;
+}
+
+/* Buttons */
+button,
+.btn,
+.button {
+    background-color: var(--color-bg-tertiary) !important;
+    border: 1px solid var(--color-border-bright) !important;
+    color: var(--color-text-primary) !important;
+    cursor: pointer !important;
+    font-family: var(--font-monospace) !important;
+    font-size: var(--font-size-base) !important;
+    padding: var(--spacing-sm) var(--spacing-md) !important;
+    text-transform: uppercase !important;
+    transition: all var(--transition-fast);
+}
+
+button:hover,
+.btn:hover,
+.button:hover {
+    background-color: var(--color-bg-hover) !important;
+    box-shadow: var(--shadow-minimal);
+    color: var(--color-accent-primary) !important;
+}
+
+button:active,
+.btn:active,
+.button:active {
+    background-color: var(--color-bg-active) !important;
+    box-shadow: var(--shadow-focus);
+}
+
+button.primary,
+.btn-primary {
+    background-color: var(--color-accent-primary) !important;
+    color: var(--color-bg-primary) !important;
+}
+
+button.danger,
+.btn-danger {
+    background-color: var(--color-accent-danger) !important;
+    border-color: var(--color-accent-danger) !important;
+    color: var(--color-bg-primary) !important;
+}
+
+/* Input fields */
+input,
+textarea,
+select {
+    background-color: var(--color-bg-tertiary) !important;
+    border: 1px solid var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+    font-family: var(--font-monospace) !important;
+    font-size: var(--font-size-base) !important;
+    padding: var(--spacing-sm) !important;
+    transition: all var(--transition-fast);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+    border-color: var(--color-border-bright) !important;
+    box-shadow: var(--shadow-focus);
+    outline: none !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: var(--color-text-muted) !important;
+}
+
+/* Links */
+a {
+    color: var(--color-accent-info) !important;
+    text-decoration: none !important;
+    transition: color var(--transition-fast);
+}
+
+a:hover {
+    color: var(--color-accent-primary) !important;
+    text-decoration: underline !important;
+}
+
+/* Header / Toolbar */
+.header,
+.toolbar,
+.topbar {
+    background-color: var(--color-bg-secondary) !important;
+    border-bottom: 2px solid var(--color-border-bright) !important;
+    color: var(--color-text-primary) !important;
+    padding: var(--spacing-sm) var(--spacing-md) !important;
+}
+
+.logo,
+.app-title {
+    color: var(--color-accent-primary) !important;
+    font-family: var(--font-monospace) !important;
+    font-size: 1.2em !important;
+    font-weight: bold !important;
+    letter-spacing: 2px !important;
+    text-transform: uppercase !important;
+}
+
+.logo::before {
+    content: "[ ";
+    color: var(--color-border-bright);
+}
+
+.logo::after {
+    content: " ]";
+    color: var(--color-border-bright);
+}
+
+/* Compose window */
+.compose,
+.messageEdit {
+    background-color: var(--color-bg-primary) !important;
+    border: 1px solid var(--color-border-bright) !important;
+    color: var(--color-text-primary) !important;
+}
+
+.compose .subject-input,
+.compose .to-input,
+.compose .from-input {
+    background-color: var(--color-bg-tertiary) !important;
+    border: 1px solid var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+    font-family: var(--font-monospace) !important;
+}
+
+.compose .body-textarea {
+    background-color: var(--color-bg-secondary) !important;
+    border: 1px solid var(--color-border) !important;
+    color: var(--color-text-primary) !important;
+    font-family: var(--font-monospace) !important;
+    min-height: 400px !important;
+}
+
+/* Modals / Popups */
+.modal,
+.popup,
+.dialog {
+    background-color: var(--color-bg-secondary) !important;
+    border: 2px solid var(--color-border-bright) !important;
+    box-shadow: 0 0 20px rgba(0, 255, 0, 0.5);
+    color: var(--color-text-primary) !important;
+}
+
+.modal-header,
+.popup-header {
+    background-color: var(--color-bg-tertiary) !important;
+    border-bottom: 1px solid var(--color-border-bright) !important;
+    color: var(--color-accent-primary) !important;
+    font-weight: bold !important;
+    text-transform: uppercase !important;
+}
+
+.modal-backdrop,
+.overlay {
+    background-color: rgba(0, 0, 0, 0.9) !important;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+::-webkit-scrollbar-track {
+    background-color: var(--color-bg-primary);
+    border: 1px solid var(--color-border);
+}
+
+::-webkit-scrollbar-thumb {
+    background-color: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border-bright);
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-bg-hover);
+    box-shadow: var(--shadow-minimal);
+}
+
+/* Loading indicators */
+.loading,
+.spinner {
+    border-color: var(--color-accent-primary) transparent transparent transparent !important;
+}
+
+/* Badges and counters */
+.badge,
+.unread-count,
+.counter {
+    background-color: var(--color-accent-primary) !important;
+    color: var(--color-bg-primary) !important;
+    font-family: var(--font-monospace) !important;
+    font-weight: bold !important;
+}
+
+/* Attachment indicators */
+.attachment-icon,
+.has-attachment {
+    color: var(--color-accent-info) !important;
+}
+
+/* Flagged/Starred messages */
+.flagged,
+.starred {
+    color: var(--color-accent-warning) !important;
+}
+
+/* Status indicators */
+.status-online {
+    color: var(--color-accent-success) !important;
+}
+
+.status-offline {
+    color: var(--color-text-muted) !important;
+}
+
+.status-error {
+    color: var(--color-accent-danger) !important;
+}
+
+/* TEMPEST compliance: Terminal prompt styling */
+.system-message::before,
+.info-message::before {
+    color: var(--color-accent-primary);
+    content: "[ SYSTEM ] ";
+    font-family: var(--font-monospace);
+    font-weight: bold;
+}
+
+/* Context menu */
+.context-menu,
+.dropdown-menu {
+    background-color: var(--color-bg-secondary) !important;
+    border: 1px solid var(--color-border-bright) !important;
+    box-shadow: 0 0 10px rgba(0, 255, 0, 0.4);
+}
+
+.context-menu-item,
+.dropdown-item {
+    color: var(--color-text-primary) !important;
+    padding: var(--spacing-sm) var(--spacing-md) !important;
+    transition: all var(--transition-fast);
+}
+
+.context-menu-item:hover,
+.dropdown-item:hover {
+    background-color: var(--color-bg-hover) !important;
+    color: var(--color-accent-primary) !important;
+}
+
+/* Search box */
+.search-input,
+.searchbox {
+    background-color: var(--color-bg-tertiary) !important;
+    border: 1px solid var(--color-border-bright) !important;
+    color: var(--color-text-primary) !important;
+    font-family: var(--font-monospace) !important;
+}
+
+.search-input::placeholder {
+    color: var(--color-text-muted) !important;
+    content: "> SEARCH...";
+}
+
+/* Reduce animations for TEMPEST compliance */
+* {
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: var(--transition-fast) !important;
+}
+
+/* Print styles (for intelligence reports) */
+@media print {
+    body {
+        background-color: white !important;
+        color: black !important;
+    }
+
+    .no-print,
+    .sidebar,
+    .toolbar,
+    button {
+        display: none !important;
+    }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    :root {
+        --color-text-primary: #00ff00;
+        --color-bg-primary: #000000;
+        --color-border-bright: #00ff00;
+    }
+}
+
+/* Accessibility: Screen reader support */
+.sr-only {
+    clip: rect(0, 0, 0, 0);
+    border: 0;
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    width: 1px;
+}
+
+/* Easter egg: Matrix-style effect on focus */
+*:focus {
+    animation: none !important;  /* TEMPEST compliant - no animations */
+}
+
+/* Classification banner support */
+.classification-banner {
+    background-color: var(--color-accent-success);
+    color: var(--color-bg-primary);
+    font-family: var(--font-monospace);
+    font-size: 1.2em;
+    font-weight: bold;
+    padding: var(--spacing-sm);
+    position: fixed;
+    text-align: center;
+    text-transform: uppercase;
+    top: 0;
+    width: 100%;
+    z-index: 9999;
+}

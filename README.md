@@ -30,7 +30,7 @@ sudo ./deploy-vps2.sh --quick
 
 **Features:**
 - 🎨 **Interactive TUI Menu** - Easy navigation and selection
-- 🔧 **Component Selection** - Choose Mattermost, POLYGOTYA, DNS Hub, Intelligence
+- 🔧 **Component Selection** - Choose Email, Mattermost, POLYGOTYA, DNS Hub, Intelligence
 - 🔐 **Auto Credential Generation** - Secure passwords for all services
 - 📊 **Progress Tracking** - Real-time deployment status
 - ✅ **Health Verification** - Automatic post-deployment checks
@@ -322,14 +322,17 @@ VPS2.0 is a comprehensive, production-grade software stack designed for intellig
 
 ### Phase 3: Optional Services (Priority 3)
 
-| Service | Purpose | Compose File |
-|---------|---------|--------------|
-| **HURRICANE** | IPv6 proxy | docker-compose.hurricane.yml |
-| **ARTICBASTION** | Secure gateway | docker-compose.yml |
-| **Bitcoin + Mempool** | Bitcoin blockchain | docker-compose.blockchain.yml |
-| **Ethereum + Blockscout** | Ethereum blockchain | docker-compose.blockchain.yml |
-| **Suricata + Zeek** | Network IDS | docker-compose.security.yml |
-| **Cuckoo Sandbox** | Dynamic malware analysis | docker-compose.analysis.yml |
+| Service | Purpose | Compose File | Documentation |
+|---------|---------|--------------|---------------|
+| **Email Module** | Self-hosted email (Stalwart + SnappyMail) | docker-compose.email.yml | [Quick Start](./docs/EMAIL_QUICKSTART.md), [DNS Guide](./docs/EMAIL_DNS_EXAMPLES.md) |
+| **Mattermost** | Team collaboration + boards | docker-compose.mattermost.yml | [Setup](./docs/mattermost/) |
+| **POLYGOTYA** | SSH callback server (PQC) | docker-compose.polygotya.yml | [README](./polygotya/README.md) |
+| **HURRICANE** | IPv6 proxy | docker-compose.hurricane.yml | - |
+| **ARTICBASTION** | Secure gateway | docker-compose.yml | - |
+| **Bitcoin + Mempool** | Bitcoin blockchain | docker-compose.blockchain.yml | - |
+| **Ethereum + Blockscout** | Ethereum blockchain | docker-compose.blockchain.yml | - |
+| **Suricata + Zeek** | Network IDS | docker-compose.security.yml | - |
+| **Cuckoo Sandbox** | Dynamic malware analysis | docker-compose.analysis.yml | - |
 
 ---
 

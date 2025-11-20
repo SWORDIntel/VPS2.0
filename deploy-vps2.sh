@@ -1199,6 +1199,29 @@ select_components() {
     fi
     echo ""
 
+    # Email Module
+    local deploy_email=$(load_state "component_email" "false")
+    if [[ "$deploy_email" == "true" ]]; then
+        echo -e "    ${GREEN}[${ICON_CHECK}]${NC} Email Module (Stalwart + SnappyMail)"
+    else
+        echo -e "  ${CYAN}4. Email Module${NC} - Self-Hosted Email (Stalwart + SnappyMail)"
+        echo "     Resource usage: ~1.5GB RAM, 10GB disk"
+        echo "     ${BLUE}ℹ${NC}  Includes: SMTP/IMAP/JMAP, Webmail, Spam Filtering, DKIM/DMARC"
+        if [[ $mem -lt 4 ]]; then
+            echo "     ${YELLOW}⚠${NC}  Warning: Email server requires reliable resources"
+        fi
+        if prompt_confirm "Deploy Email Module? (Requires DNS configuration)"; then
+            deploy_email="true"
+            save_state "component_email" "true"
+            echo -e "    ${GREEN}[${ICON_CHECK}]${NC} Email Module will be deployed"
+            log_warn "Remember: Email requires proper DNS configuration (MX, SPF, DKIM, DMARC)"
+            log_info "DNS setup guide: docs/EMAIL_DNS_EXAMPLES.md"
+        else
+            echo -e "    ${YELLOW}[ ]${NC} Email Module will NOT be deployed"
+        fi
+    fi
+    echo ""
+
     # Show total resource estimate
     local estimated_ram=4  # Core services baseline
     local estimated_disk=30  # Core services baseline
@@ -1206,6 +1229,7 @@ select_components() {
     [[ "$deploy_mattermost" == "true" ]] && { estimated_ram=$((estimated_ram + 2)); estimated_disk=$((estimated_disk + 10)); }
     [[ "$deploy_polygotya" == "true" ]] && { estimated_ram=$((estimated_ram + 1)); estimated_disk=$((estimated_disk + 2)); }
     [[ "$deploy_dnshub" == "true" ]] && { estimated_ram=$((estimated_ram + 1)); estimated_disk=$((estimated_disk + 5)); }
+    [[ "$deploy_email" == "true" ]] && { estimated_ram=$((estimated_ram + 2)); estimated_disk=$((estimated_disk + 10)); }
 
     log_info "${BOLD}Estimated Total Resource Usage:${NC}"
     echo "  • RAM: ~${estimated_ram}GB"
@@ -1310,6 +1334,38 @@ generate_credentials() {
             log_info "Generating POLYGOTYA admin password..."
             local poly_admin=$(openssl rand -base64 24)
             sed -i "s|POLYGOTYA_ADMIN_PASSWORD=.*|POLYGOTYA_ADMIN_PASSWORD=${poly_admin}|" .env
+            generated=true
+        fi
+    fi
+
+    # Email credentials (if selected)
+    if [[ "$(load_state "component_email")" == "true" ]]; then
+        sed -i "s/DEPLOY_EMAIL=false/DEPLOY_EMAIL=true/" .env 2>/dev/null || echo "DEPLOY_EMAIL=true" >> .env
+
+        # Generate mail admin password
+        if ! grep -q "MAIL_ADMIN_PASSWORD=" .env 2>/dev/null || [[ "${MAIL_ADMIN_PASSWORD:-CHANGE_ME}" == *"CHANGE_ME"* ]]; then
+            log_info "Generating Stalwart admin password..."
+            local mail_admin_pass=$(openssl rand -base64 32)
+            if grep -q "MAIL_ADMIN_PASSWORD=" .env 2>/dev/null; then
+                sed -i "s|MAIL_ADMIN_PASSWORD=.*|MAIL_ADMIN_PASSWORD=${mail_admin_pass}|" .env
+            else
+                echo "MAIL_ADMIN_PASSWORD=${mail_admin_pass}" >> .env
+            fi
+            generated=true
+        fi
+
+        # Set mail domain
+        local domain=$(load_state "domain")
+        if ! grep -q "MAIL_DOMAIN=" .env 2>/dev/null; then
+            log_info "Setting mail domain to ${domain}..."
+            echo "MAIL_DOMAIN=${domain}" >> .env
+            echo "MAIL_HOSTNAME=mail.${domain}" >> .env
+            generated=true
+        fi
+
+        # Set mail admin user
+        if ! grep -q "MAIL_ADMIN_USER=" .env 2>/dev/null; then
+            echo "MAIL_ADMIN_USER=admin@${domain}" >> .env
             generated=true
         fi
     fi
@@ -1667,6 +1723,101 @@ deploy_polygotya() {
     pause
 }
 
+deploy_email() {
+    if [[ "$(load_state "component_email")" != "true" ]]; then
+        return 0
+    fi
+
+    log_section "Deploying Email Module (Stalwart + SnappyMail)"
+
+    cd "$PROJECT_ROOT"
+
+    # Check if DKIM keys exist
+    if [[ ! -f "stalwart/ssl/dkim.key" ]]; then
+        log_warn "DKIM keys not found. Generating now..."
+        log_info "Domain: $(load_state "domain")"
+
+        # Generate DKIM keys
+        if [[ -f "stalwart/scripts/generate-dkim.sh" ]]; then
+            bash stalwart/scripts/generate-dkim.sh "$(load_state "domain")" || {
+                log_error "Failed to generate DKIM keys"
+                log_info "You can generate them later with: cd stalwart/scripts && ./generate-dkim.sh <domain>"
+            }
+        fi
+    fi
+
+    show_progress 0 4 "Starting Stalwart mail server..."
+    docker-compose -f docker-compose.yml -f docker-compose.email.yml up -d stalwart
+    sleep 20
+
+    show_progress 1 4 "Starting SnappyMail webmail..."
+    docker-compose -f docker-compose.yml -f docker-compose.email.yml up -d snappymail
+    sleep 10
+
+    show_progress 2 4 "Verifying mail services health..."
+    sleep 5
+
+    # Check if Stalwart is healthy
+    if docker ps | grep -q "stalwart.*healthy\|stalwart.*Up"; then
+        log_success "Stalwart is running"
+    else
+        log_warn "Stalwart may still be starting up - check 'docker logs stalwart'"
+    fi
+
+    # Check if SnappyMail is healthy
+    if docker ps | grep -q "snappymail.*healthy\|snappymail.*Up"; then
+        log_success "SnappyMail is running"
+    else
+        log_warn "SnappyMail may still be starting up - check 'docker logs snappymail'"
+    fi
+
+    show_progress 3 4 "Configuring email services..."
+    sleep 3
+
+    show_progress 4 4 "Email module deployed"
+    echo ""
+
+    log_success "Email module deployed successfully"
+    echo ""
+    log_info "${BOLD}Important Next Steps:${NC}"
+    echo ""
+    echo "  1. ${YELLOW}Configure DNS Records${NC} (CRITICAL for email delivery)"
+    echo "     See: docs/EMAIL_DNS_EXAMPLES.md"
+    echo "     Required: MX, A, SPF, DKIM, DMARC, PTR records"
+    echo ""
+    echo "  2. ${YELLOW}Publish DKIM DNS Record${NC}"
+    echo "     File: stalwart/ssl/dkim.txt"
+    echo "     Add the TXT record shown in that file to your DNS"
+    echo ""
+    echo "  3. ${YELLOW}Configure TLS Certificates${NC}"
+    echo "     Stalwart needs valid TLS certs for mail.$(load_state "domain")"
+    echo "     Caddy will handle this automatically once DNS is configured"
+    echo ""
+    echo "  4. ${YELLOW}Set Reverse DNS (PTR)${NC}"
+    echo "     Contact your VPS provider to set PTR record"
+    echo "     Your server IP should resolve to mail.$(load_state "domain")"
+    echo ""
+    echo "  5. ${YELLOW}Create First Email Account${NC}"
+    echo "     docker exec -it stalwart stalwart-cli account create \\"
+    echo "       --email admin@$(load_state "domain") \\"
+    echo "       --password 'YourSecurePassword' \\"
+    echo "       --name 'Administrator' \\"
+    echo "       --quota 10G"
+    echo ""
+    echo "  ${BOLD}Access Points:${NC}"
+    echo "    • Webmail: https://spiderwebmail.$(load_state "domain")"
+    echo "    • Admin UI: https://mailadmin.$(load_state "domain") (VPN only)"
+    echo "    • SMTP Submission: mail.$(load_state "domain"):587 (STARTTLS)"
+    echo "    • IMAPS: mail.$(load_state "domain"):993"
+    echo ""
+    log_info "Full setup guide: stalwart/README.md"
+    log_info "DNS examples: docs/EMAIL_DNS_EXAMPLES.md"
+    echo ""
+
+    save_state "deployed_email" "true"
+    pause
+}
+
 #==============================================
 # Fresh Installation
 #==============================================
@@ -1698,6 +1849,7 @@ fresh_installation() {
             deploy_core_services
             deploy_mattermost
             deploy_polygotya
+            deploy_email
             show_deployment_summary
             return 0
         else
@@ -1721,6 +1873,7 @@ fresh_installation() {
     deploy_core_services
     deploy_mattermost
     deploy_polygotya
+    deploy_email
 
     # Final summary
     show_deployment_summary
@@ -1736,6 +1889,7 @@ add_components() {
     local options=(
         "Mattermost (Team Collaboration)"
         "POLYGOTYA (SSH Callback Server)"
+        "Email Module (Stalwart + SnappyMail)"
         "DNS Hub (Technitium DNS + WireGuard)"
         "Intelligence Platform (MISP + OpenCTI)"
     )
@@ -1756,11 +1910,16 @@ add_components() {
             deploy_polygotya
             ;;
         3)
+            save_state "component_email" "true"
+            generate_credentials
+            deploy_email
+            ;;
+        4)
             log_warn "DNS Hub deployment not yet implemented in this interface"
             log_info "Use: ./scripts/dns-firewall.sh"
             pause
             ;;
-        4)
+        5)
             log_warn "Intelligence Platform deployment not yet implemented in this interface"
             log_info "Deploy manually with docker-compose"
             pause
