@@ -1,0 +1,418 @@
+#
+# Stalwart Mail Server - Main Configuration
+# VPS2.0 Email Module - Production Configuration
+#
+# This file configures a production-ready mail server with:
+# - Full SMTP/IMAP/JMAP/ManageSieve support
+# - SPF, DKIM, DMARC, ARC verification and signing
+# - Advanced spam filtering and reputation tracking
+# - TLS 1.2/1.3 with modern cipher suites
+# - Prometheus metrics and structured logging
+#
+
+[server]
+hostname = "mail.swordintelligence.airforce"
+greeting = "SWORD Intelligence Mail Server"
+
+[server.listener.smtp]
+bind = ["0.0.0.0:25"]
+protocol = "smtp"
+tls.implicit = false
+
+[server.listener.submission]
+bind = ["0.0.0.0:587"]
+protocol = "smtp"
+tls.implicit = false
+tls.require = true
+
+[server.listener.submissions]
+bind = ["0.0.0.0:465"]
+protocol = "smtp"
+tls.implicit = true
+
+[server.listener.imap]
+bind = ["0.0.0.0:143"]
+protocol = "imap"
+tls.implicit = false
+
+[server.listener.imaps]
+bind = ["0.0.0.0:993"]
+protocol = "imap"
+tls.implicit = true
+
+[server.listener.sieve]
+bind = ["0.0.0.0:4190"]
+protocol = "managesieve"
+tls.implicit = false
+tls.require = true
+
+[server.listener.http]
+bind = ["0.0.0.0:8080"]
+protocol = "http"
+
+#==============================================
+# TLS Configuration
+#==============================================
+
+[tls]
+# Let's Encrypt certificates (managed by Caddy, copied to Stalwart)
+# Or generate with: certbot certonly --standalone -d mail.swordintelligence.airforce
+certificate = "/opt/stalwart-mail/ssl/fullchain.pem"
+private-key = "/opt/stalwart-mail/ssl/privkey.pem"
+
+# Cipher suites for TLS 1.2 and TLS 1.3
+ciphers = [
+    "TLS_AES_256_GCM_SHA384",
+    "TLS_AES_128_GCM_SHA256",
+    "TLS_CHACHA20_POLY1305_SHA256",
+    "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+    "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+    "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+    "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+]
+
+# Protocol versions
+protocols = ["TLSv1.2", "TLSv1.3"]
+
+# Enable DANE TLSA record validation
+enable-dane = true
+
+#==============================================
+# Storage Configuration
+#==============================================
+
+[storage]
+# Backend: SQLite (for small deployments) or PostgreSQL (for production)
+# Options: "sqlite", "postgresql", "mysql", "rocksdb"
+backend = "sqlite"
+
+[storage.sqlite]
+path = "/opt/stalwart-mail/data/mail.db"
+
+# Example PostgreSQL configuration (uncomment to use)
+# [storage.postgresql]
+# host = "postgres"
+# port = 5432
+# database = "stalwart"
+# user = "stalwart"
+# password = "changeme"
+
+# Blob storage for large attachments
+[storage.blob]
+type = "local"
+path = "/opt/stalwart-mail/data/blobs"
+
+# Full-text search index
+[storage.fts]
+type = "local"
+path = "/opt/stalwart-mail/data/fts"
+
+#==============================================
+# Authentication
+#==============================================
+
+[auth]
+# Internal authentication (file-based)
+# For production, integrate with LDAP or OAuth
+type = "internal"
+
+# Allow password authentication
+allow-password = true
+
+# Require strong passwords
+password-min-length = 12
+
+# Enable two-factor authentication
+enable-2fa = true
+
+# Session timeout (seconds)
+session-timeout = 3600
+
+# Maximum failed login attempts before lockout
+max-auth-failures = 5
+auth-failure-lockout = 900  # 15 minutes
+
+#==============================================
+# SMTP Configuration
+#==============================================
+
+[smtp]
+# Maximum message size (25 MB)
+max-message-size = 26214400
+
+# Maximum recipients per message
+max-recipients = 100
+
+# Greeting delay (tarpitting) to slow down spammers
+greeting-delay = 2
+
+# Require authentication for submission
+require-auth = true
+
+# Allow relay only for authenticated users
+relay.allow-authenticated = true
+relay.allow-local = true
+
+# Reject invalid recipients
+reject-invalid-recipients = true
+
+#==============================================
+# DKIM Signing
+#==============================================
+
+[smtp.dkim]
+# Enable DKIM signing for outbound mail
+enable = true
+
+# DKIM selector (e.g., "default", "mail", "2025")
+selector = "default"
+
+# DKIM key path (generate with: openssl genrsa -out dkim.key 2048)
+private-key = "/opt/stalwart-mail/ssl/dkim.key"
+
+# Sign all outbound mail
+sign-authenticated = true
+
+# DKIM algorithm
+algorithm = "rsa-sha256"
+
+# Headers to include in signature
+headers = ["From", "To", "Subject", "Date", "Message-ID", "Content-Type"]
+
+#==============================================
+# SPF, DMARC, ARC Verification
+#==============================================
+
+[smtp.spf]
+enable = true
+policy = "reject"  # Options: "none", "softfail", "reject"
+
+[smtp.dmarc]
+enable = true
+policy = "quarantine"  # Options: "none", "quarantine", "reject"
+reporting = true
+report-email = "dmarc-reports@swordintelligence.airforce"
+
+[smtp.arc]
+enable = true
+seal = true
+
+#==============================================
+# Spam Filtering
+#==============================================
+
+[spam]
+# Enable built-in spam filter
+enable = true
+
+# Spam threshold (0-100, higher = more spam-like)
+threshold = 5.0
+
+# Actions based on score
+actions = [
+    { score = 5.0, action = "flag" },
+    { score = 8.0, action = "quarantine" },
+    { score = 12.0, action = "reject" },
+]
+
+# SpamAssassin-like rules
+[spam.rules]
+# Sender reputation tracking
+track-sender-reputation = true
+
+# DNS blocklists (DNSBLs)
+dnsbls = [
+    "zen.spamhaus.org",
+    "bl.spamcop.net",
+    "dnsbl.sorbs.net",
+]
+
+# Greylisting (temporary rejection of unknown senders)
+greylist.enable = true
+greylist.duration = 300  # 5 minutes
+
+# Phishing detection
+detect-phishing = true
+
+# Check for malformed headers
+check-headers = true
+
+# Bayesian filtering
+bayesian.enable = true
+bayesian.auto-learn = true
+
+#==============================================
+# Sender Reputation
+#==============================================
+
+[reputation]
+# Track reputation by IP, ASN, domain, and email address
+track-ip = true
+track-asn = true
+track-domain = true
+track-email = true
+
+# Reputation scoring factors
+weight-ip = 0.4
+weight-asn = 0.2
+weight-domain = 0.3
+weight-email = 0.1
+
+# Decay factor (how quickly reputation changes)
+decay-rate = 0.95
+
+#==============================================
+# IMAP Configuration
+#==============================================
+
+[imap]
+# Maximum IMAP connections per user
+max-connections = 10
+
+# IDLE timeout (seconds)
+idle-timeout = 1800
+
+# Enable IMAP COMPRESS extension
+enable-compress = true
+
+# Enable IMAP CONDSTORE/QRESYNC (for fast sync)
+enable-condstore = true
+
+#==============================================
+# JMAP Configuration
+#==============================================
+
+[jmap]
+# Enable JMAP (modern mail protocol)
+enable = true
+
+# Maximum JMAP request size
+max-request-size = 10485760  # 10 MB
+
+# Enable push notifications
+enable-push = false
+
+#==============================================
+# Sieve Filtering
+#==============================================
+
+[sieve]
+# Enable ManageSieve protocol
+enable = true
+
+# Maximum script size
+max-script-size = 102400  # 100 KB
+
+# Maximum number of scripts per user
+max-scripts = 10
+
+# Trusted extensions
+trusted-extensions = [
+    "fileinto",
+    "reject",
+    "envelope",
+    "body",
+    "vacation",
+    "imap4flags",
+    "regex",
+    "subaddress",
+]
+
+#==============================================
+# Rate Limiting
+#==============================================
+
+[rate-limit]
+# Outbound mail rate limits (per user)
+outbound.messages-per-hour = 100
+outbound.recipients-per-hour = 500
+
+# Inbound mail rate limits (per IP)
+inbound.messages-per-hour = 50
+inbound.connections-per-minute = 10
+
+#==============================================
+# Logging
+#==============================================
+
+[log]
+# Log level: "trace", "debug", "info", "warn", "error"
+level = "info"
+
+# Log format: "json" or "text"
+format = "json"
+
+# Log destination
+output = "stdout"
+
+# Log rotation (if using file output)
+# file = "/var/log/stalwart/mail.log"
+# max-size = 104857600  # 100 MB
+# max-files = 10
+
+# Enable audit logging for compliance
+audit.enable = true
+audit.log-auth = true
+audit.log-delivery = true
+audit.log-deletions = true
+
+#==============================================
+# Metrics
+#==============================================
+
+[metrics]
+# Enable Prometheus metrics endpoint
+enable = true
+endpoint = "/metrics"
+
+# Metrics port (same as HTTP listener)
+# Metrics will be available at http://stalwart:8080/metrics
+
+#==============================================
+# MTA-STS and TLS-RPT
+#==============================================
+
+[mta-sts]
+# Enable MTA-STS (SMTP TLS enforcement)
+enable = true
+policy = "enforce"
+max-age = 604800  # 7 days
+
+# TLS-RPT reporting
+[tls-rpt]
+enable = true
+report-email = "tls-reports@swordintelligence.airforce"
+
+#==============================================
+# Milter Support (Optional)
+#==============================================
+
+# Milter integration for external filters (e.g., Rspamd, ClamAV)
+# [milter]
+# enable = false
+# socket = "inet:127.0.0.1:11332"  # Rspamd
+# timeout = 30
+
+#==============================================
+# Quota Management
+#==============================================
+
+[quota]
+# Default mailbox quota per user (bytes)
+default-quota = 10737418240  # 10 GB
+
+# Warning threshold
+warning-threshold = 0.9  # 90%
+
+#==============================================
+# Maintenance
+#==============================================
+
+[maintenance]
+# Automatic cleanup of old messages
+purge-deleted-after-days = 30
+purge-trash-after-days = 90
+purge-spam-after-days = 30
+
+# Database optimization
+vacuum-schedule = "0 2 * * 0"  # Every Sunday at 2 AM

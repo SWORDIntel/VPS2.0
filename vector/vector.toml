@@ -65,7 +65,44 @@ inputs = ["filter_noise"]
 rate = 10
 key_field = "container_name"
 exclude = '''
-  contains(["swordintelligence", "misp", "opencti"], .container_name)
+  contains(["swordintelligence", "misp", "opencti", "stalwart", "snappymail"], .container_name)
+'''
+
+# Parse and enrich mail server logs
+[transforms.mail_logs]
+type = "remap"
+inputs = ["filter_noise"]
+source = '''
+  # Only process mail services
+  if contains(["stalwart", "snappymail"], .container_name) {
+    # Extract common mail fields
+    .mail_from = get(.message, ["from"]) ?? null
+    .mail_to = get(.message, ["to"]) ?? null
+    .mail_subject = get(.message, ["subject"]) ?? null
+    .mail_message_id = get(.message, ["message_id"]) ?? null
+    .mail_spam_score = get(.message, ["spam_score"]) ?? null
+    .mail_action = get(.message, ["action"]) ?? null
+    .mail_queue_id = get(.message, ["queue_id"]) ?? null
+
+    # Tag mail-specific events
+    .category = "email"
+  }
+'''
+
+# Filter important mail events (security, errors, delivery issues)
+[transforms.mail_important]
+type = "filter"
+inputs = ["mail_logs"]
+condition = '''
+  .category == "email" && (
+    contains(string!(.message), "rejected") ||
+    contains(string!(.message), "spam") ||
+    contains(string!(.message), "error") ||
+    contains(string!(.message), "failed") ||
+    contains(string!(.message), "authentication") ||
+    contains(string!(.level), "error") ||
+    contains(string!(.level), "warn")
+  )
 '''
 
 #==============================================
@@ -75,12 +112,13 @@ exclude = '''
 # Send to Loki
 [sinks.loki]
 type = "loki"
-inputs = ["sample_high_volume", "syslog"]
+inputs = ["sample_high_volume", "syslog", "mail_logs", "mail_important"]
 endpoint = "http://loki:3100"
 encoding.codec = "json"
 labels.service = "{{ service }}"
 labels.container = "{{ container_name }}"
 labels.environment = "{{ environment }}"
+labels.category = "{{ category }}"
 
 # Send metrics to VictoriaMetrics
 [sinks.victoriametrics]
