@@ -328,7 +328,7 @@ VPS2.0 is a comprehensive, production-grade software stack designed for intellig
 | **Mattermost** | Team collaboration + boards | docker-compose.mattermost.yml | [Setup](./docs/mattermost/) |
 | **POLYGOTYA** | SSH callback server (PQC) | docker-compose.polygotya.yml | [README](./polygotya/README.md) |
 | **HURRICANE** | IPv6 proxy | docker-compose.hurricane.yml | - |
-| **ARTICBASTION** | Secure gateway | docker-compose.yml | - |
+| **ARTICBASTION** | Quantum-resistant mesh gateway | docker-compose.articbastion.yml | [Install Guide](#-articbastion-installation) |
 | **Bitcoin + Mempool** | Bitcoin blockchain | docker-compose.blockchain.yml | - |
 | **Ethereum + Blockscout** | Ethereum blockchain | docker-compose.blockchain.yml | - |
 | **Suricata + Zeek** | Network IDS | docker-compose.security.yml | - |
@@ -385,6 +385,64 @@ clamscan -r -i /
 
 # Review audit logs
 ausearch -k docker
+```
+
+---
+
+## 🛡️ ARTICBASTION Installation
+
+ARTICBASTION is a quantum-resistant mesh security gateway providing secure traffic routing, SOCKS5/HTTP proxy, and honeypot capabilities.
+
+### Docker Installation (Recommended)
+
+```bash
+# 1. Configure environment
+cp .env.template .env
+# Edit .env and set:
+#   DEPLOY_ARTICBASTION=true
+#   ARTICBASTION_DB_PASSWORD=<secure_password>
+
+# 2. Deploy ARTICBASTION
+docker-compose -f docker-compose.articbastion.yml up -d
+
+# 3. Verify
+docker-compose -f docker-compose.articbastion.yml ps
+```
+
+### Native Installation (Headless Server)
+
+```bash
+# 1. Initialize submodule
+git submodule update --init external/ARTICBASTION
+
+# 2. Install (automated, no GUI)
+cd external/ARTICBASTION
+./install --auto --no-systemd
+
+# 3. Or user-only install (no sudo required)
+./install --auto --user-only
+```
+
+### ARTICBASTION Ports
+
+| Port | Service |
+|------|---------|
+| 8022 | Gateway SSH |
+| 8443 | HTTPS API |
+| 1081 | SOCKS5 Proxy |
+| 8890 | HTTP Proxy |
+| 8891 | HTTPS Proxy |
+| 7946 | Mesh Discovery |
+| 9091 | Metrics |
+
+### Configuration
+
+Key `.env` settings:
+```bash
+DEPLOY_ARTICBASTION=true
+BASTION_MODE=FORTRESS
+SECURITY_LEVEL=PARANOID
+ARTICBASTION_HONEYPOT_ENABLED=true
 ```
 
 ---
