@@ -1,12 +1,16 @@
 [submodule "external/HURRICANE"]
 	path = external/HURRICANE
 	url = https://github.com/SWORDIntel/HURRICANE.git
+	branch = main
 [submodule "external/CLOUDCLEAR"]
 	path = external/CLOUDCLEAR
 	url = https://github.com/SWORDIntel/CLOUDCLEAR.git
+	branch = master
 [submodule "external/ARTICBASTION"]
 	path = external/ARTICBASTION
 	url = https://github.com/SWORDIntel/ARTICBASTION.git
+	branch = main
 [submodule "external/SWORDINTELLIGENCE"]
 	path = external/SWORDINTELLIGENCE
 	url = https://github.com/SWORDOps/SWORDINTELLIGENCE.git
+	branch = main
